@@ -11,6 +11,12 @@ export const mockRoute = new Elysia({ prefix: "/mock/users" })
       response: {
         200: tSuccessResponse(t.Object({ users: t.Array(UserModel.entity) })),
       },
+      detail: {
+        summary: "List mock users",
+        description:
+          "Dev-only reference implementation of the model/service/route pattern.",
+        tags: ["Mock"],
+      },
     },
   )
   .get(
@@ -23,6 +29,11 @@ export const mockRoute = new Elysia({ prefix: "/mock/users" })
         200: tSuccessResponse(UserModel.entity),
         404: tErrorResponse("NOT_FOUND"),
       },
+      detail: {
+        summary: "Get a mock user",
+        description: "Dev-only.",
+        tags: ["Mock"],
+      },
     },
   )
   .post(
@@ -33,6 +44,11 @@ export const mockRoute = new Elysia({ prefix: "/mock/users" })
       response: {
         200: tSuccessResponse(UserModel.entity),
         409: tErrorResponse("ALREADY_EXISTS"),
+      },
+      detail: {
+        summary: "Create a mock user",
+        description: "Dev-only. Name must be unique.",
+        tags: ["Mock"],
       },
     },
   );

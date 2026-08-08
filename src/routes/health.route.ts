@@ -8,5 +8,10 @@ export const healthRoute = new Elysia().get(
     response: {
       200: tSuccessResponse(t.Object({ status: t.Literal("ok") })),
     },
+    detail: {
+      summary: "Health check",
+      description: "Liveness check — always on, in every environment.",
+      tags: ["Health"],
+    },
   },
 );
