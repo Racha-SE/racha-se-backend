@@ -10,10 +10,7 @@ jobs:
   push-to-scalar-registry:
     runs-on: ubuntu-latest
     env:
-      NODE_ENV: production
-      DATABASE_URL: postgres://nobody:nobody@localhost:1/unreachable
-      BETTER_AUTH_SECRET: ci-only-placeholder-secret-unused-outside-this-job
-      BETTER_AUTH_URL: http://localhost:3000
+      NODE_ENV: development
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -53,8 +50,4 @@ jobs:
         run: npx @scalar/cli auth login --token ${{ secrets.SCALAR_API_KEY }}
 
       - name: Push to Registry
-        # --force: the doc's version stays "1.0.0" on every push (see
-        # src/index.ts) — this job is meant to continuously sync main's
-        # current state, not cut versioned releases, so overwriting the
-        # same version every time is the intended behavior.
-        run: npx @scalar/cli registry publish --namespace default-team-dt2lv --slug racha-se-backend --force api/openapi.json
+        run: npx @scalar/cli registry publish --namespace racha-se --slug racha-se-backend --force api/openapi.json
