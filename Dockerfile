@@ -9,4 +9,4 @@ COPY . .
 
 EXPOSE 3000
 
-CMD ["bun", "run", "--watch", "src/index.ts"]
+CMD ["bun", "run", "src/index.ts"]
