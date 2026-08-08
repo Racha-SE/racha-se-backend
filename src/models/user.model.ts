@@ -1,18 +1,14 @@
 import { type Static, t } from "elysia";
+import { createInsertSchema, createSelectSchema } from "drizzle-typebox";
+import { mockUsersTable } from "@/db/schema";
+
+const entity = createSelectSchema(mockUsersTable);
+const insertSchema = createInsertSchema(mockUsersTable);
 
 export const UserModel = {
-  entity: t.Object({
-    id: t.String(),
-    name: t.String(),
-  }),
-
-  params: t.Object({
-    id: t.String(),
-  }),
-
-  createBody: t.Object({
-    name: t.String(),
-  }),
+  entity,
+  params: t.Pick(entity, ["id"]),
+  createBody: t.Pick(insertSchema, ["name"]),
 };
 
 export type User = Static<typeof UserModel.entity>;
