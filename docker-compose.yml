@@ -8,6 +8,7 @@ services:
       DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
       BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET}
       BETTER_AUTH_URL: ${BETTER_AUTH_URL}
+      CORS_ORIGIN: ${CORS_ORIGIN}
     volumes:
       - ./src:/app/src
     depends_on:
