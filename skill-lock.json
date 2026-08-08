@@ -1,0 +1,23 @@
+{
+  "version": 1,
+  "skills": {
+    "better-auth-best-practices": {
+      "source": "better-auth/skills",
+      "sourceType": "github",
+      "skillPath": "better-auth/best-practices/SKILL.md",
+      "computedHash": "6d41db1678dbda3a625403b0544d1ae1c4be34499e0cc252e4a83d16753df0bd"
+    },
+    "create-auth-skill": {
+      "source": "better-auth/skills",
+      "sourceType": "github",
+      "skillPath": "better-auth/create-auth/SKILL.md",
+      "computedHash": "55ea33dc76fe7f19f5933cc256fa8a9004ab9bc6b13a91f6cd9172898d43446c"
+    },
+    "elysiajs": {
+      "source": "elysiajs/skills",
+      "sourceType": "github",
+      "skillPath": "elysia/SKILL.md",
+      "computedHash": "c553412bafe02012b323ae7d118841375e58810be4f6984a3970d83bf7988355"
+    }
+  }
+}

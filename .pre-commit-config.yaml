@@ -1,0 +1,59 @@
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+        exclude: ^docs/skills/
+      - id: end-of-file-fixer
+        exclude: ^docs/skills/
+      - id: check-json
+        exclude: ^tsconfig\.json$
+      - id: check-yaml
+      - id: check-merge-conflict
+      - id: check-added-large-files
+      - id: check-case-conflict
+      - id: mixed-line-ending
+      - id: check-symlinks
+      - id: fix-byte-order-marker
+
+  - repo: local
+    hooks:
+      - id: typecheck
+        name: tsc --noEmit
+        entry: bun run typecheck
+        language: system
+        pass_filenames: false
+        types_or: [ts, tsx]
+
+      - id: eslint
+        name: eslint --fix
+        entry: bunx eslint --fix
+        language: system
+        types_or: [ts, tsx]
+
+      - id: prettier
+        name: prettier --write
+        entry: bunx prettier --write
+        language: system
+        types_or: [ts, tsx, json, yaml, markdown]
+
+      - id: commitlint
+        name: commitlint
+        entry: bunx commitlint --edit
+        language: system
+        stages: [commit-msg]
+
+      - id: no-push-to-main
+        name: block push to main
+        entry: |
+          bash -c '
+            while read -r local_ref local_sha remote_ref remote_sha; do
+              if [[ "$remote_ref" == refs/heads/main ]]; then
+                echo "Direct push to main is blocked by a local pre-push hook. Open a PR instead." >&2
+                exit 1
+              fi
+            done
+          '
+        language: system
+        pass_filenames: false
+        stages: [pre-push]
