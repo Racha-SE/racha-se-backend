@@ -52,4 +52,8 @@ jobs:
         run: npx @scalar/cli auth login --token ${{ secrets.SCALAR_API_KEY }}
 
       - name: Push to Registry
-        run: npx @scalar/cli registry publish --namespace default-team-dt2lv --slug racha-se-backend api/openapi.json
+        # --force: the doc's version stays "1.0.0" on every push (see
+        # src/index.ts) — this job is meant to continuously sync main's
+        # current state, not cut versioned releases, so overwriting the
+        # same version every time is the intended behavior.
+        run: npx @scalar/cli registry publish --namespace default-team-dt2lv --slug racha-se-backend --force api/openapi.json
