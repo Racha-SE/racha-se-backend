@@ -47,12 +47,10 @@ repos:
         name: block push to main
         entry: |
           bash -c '
-            while read -r local_ref local_sha remote_ref remote_sha; do
-              if [[ "$remote_ref" == refs/heads/main ]]; then
-                echo "Direct push to main is blocked by a local pre-push hook. Open a PR instead." >&2
-                exit 1
-              fi
-            done
+            if [[ "$PRE_COMMIT_REMOTE_BRANCH" == refs/heads/main ]]; then
+              echo "Direct push to main is blocked by a local pre-push hook. Open a PR instead." >&2
+              exit 1
+            fi
           '
         language: system
         pass_filenames: false
