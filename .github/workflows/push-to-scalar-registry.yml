@@ -4,15 +4,13 @@ on:
   push:
     branches:
       - main
+  workflow_dispatch:
 
 jobs:
   push-to-scalar-registry:
     runs-on: ubuntu-latest
     env:
-      NODE_ENV: production
-      DATABASE_URL: postgres://nobody:nobody@localhost:1/unreachable
-      BETTER_AUTH_SECRET: ci-only-placeholder-secret-unused-outside-this-job
-      BETTER_AUTH_URL: http://localhost:3000
+      NODE_ENV: development
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -52,4 +50,4 @@ jobs:
         run: npx @scalar/cli auth login --token ${{ secrets.SCALAR_API_KEY }}
 
       - name: Push to Registry
-        run: npx @scalar/cli registry publish --namespace default-team-dt2lv --slug racha-se-backend api/openapi.json
+        run: npx @scalar/cli registry publish --namespace racha-se --slug racha-se-backend --force api/openapi.json
