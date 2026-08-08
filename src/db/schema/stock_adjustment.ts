@@ -22,8 +22,8 @@ export const stockAdjustment = pgTable("stock_adjustment", {
   adjustmentType: adjustmentTypeEnum("adjustment_type").notNull(),
   quantityChange: integer("quantity_change").notNull(),
   reason: text("reason").notNull(),
-  userId: integer("user_id")
+  userId: text("user_id")
     .notNull()
-    .references(() => user.userId),
+    .references(() => user.id),
   createdAt: createdAtColumn(),
 });
