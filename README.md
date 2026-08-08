@@ -25,7 +25,10 @@ pre-commit install --hook-type pre-push
 # 4. start Postgres + Adminer
 docker compose up -d db adminer
 
-# 5. run the dev server
+# 5. run database migrations
+bun run db:migrate
+
+# 6. run the dev server
 bun run dev
 ```
 
@@ -33,15 +36,19 @@ The API is now at `http://localhost:3000/v1`.
 
 ## Scripts
 
-| Command              | What it does                                                 |
-| -------------------- | ------------------------------------------------------------ |
-| `bun run dev`        | Start the dev server with `--watch` (`NODE_ENV=development`) |
-| `bun test`           | Run the test suite                                           |
-| `bun run typecheck`  | `tsc --noEmit`                                               |
-| `bun run lint`       | `eslint .`                                                   |
-| `bun run lint:fix`   | `eslint --fix .`                                             |
-| `bun run format`     | `prettier --check .`                                         |
-| `bun run format:fix` | `prettier --write .`                                         |
+| Command                      | What it does                                                                            |
+| ---------------------------- | --------------------------------------------------------------------------------------- |
+| `bun run dev`                | Start the dev server with `--watch` (`NODE_ENV=development`)                            |
+| `bun test`                   | Run the test suite                                                                      |
+| `bun run typecheck`          | `tsc --noEmit`                                                                          |
+| `bun run lint`               | `eslint .`                                                                              |
+| `bun run lint:fix`           | `eslint --fix .`                                                                        |
+| `bun run format`             | `prettier --check .`                                                                    |
+| `bun run format:fix`         | `prettier --write .`                                                                    |
+| `bun run db:generate`        | Generate a migration from `src/db/schema/`                                              |
+| `bun run db:migrate`         | Apply pending migrations to `DATABASE_URL`                                              |
+| `bun run db:studio`          | Open [Drizzle Studio](https://orm.drizzle.team/drizzle-studio/overview) (DB browser UI) |
+| `bun run db:seed:mock-users` | Reset `mock_users` to a fixed set of 9 names (`seeds/mock_users.sql`)                   |
 
 ## Routes
 
@@ -50,11 +57,11 @@ All routes are mounted under `/v1`.
 | Route                    | Notes                                                                           |
 | ------------------------ | ------------------------------------------------------------------------------- |
 | `GET /v1/health`         | Always on — liveness check                                                      |
-| `GET /v1/mock/users`     | **Dev-only** (`NODE_ENV=development`) — reference implementation, not real data |
+| `GET /v1/mock/users`     | **Dev-only** (`NODE_ENV=development`) — real DB-backed reference implementation |
 | `GET /v1/mock/users/:id` | Dev-only                                                                        |
 | `POST /v1/mock/users`    | Dev-only                                                                        |
 
-The `mock` routes exist purely to show the intended architecture (model → service → route). See [CONTRIBUTING.md](./CONTRIBUTING.md) before adding real ones.
+The `mock` routes exist to show the intended architecture end-to-end (model → service → route, backed by a real `mock_users` table via Drizzle) — but they're not part of the real product schema. See [CONTRIBUTING.md](./CONTRIBUTING.md) before adding real routes.
 
 ## Docker
 
@@ -69,11 +76,30 @@ The `mock` routes exist purely to show the intended architecture (model → serv
 Ports are non-default on purpose to avoid clashing with other local projects.
 
 ```bash
-docker compose up -d             # start everything, including the backend container
-docker compose up -d db adminer  # just the DB (common if you're running `bun run dev` on the host instead)
-docker compose stop              # stop without deleting containers/volumes
-docker compose down              # stop and remove containers + network
+docker compose up -d db adminer                          # just the DB (common if you're running `bun run dev` on the host instead)
+docker compose run --rm backend bun run db:migrate        # apply migrations before the backend container serves traffic
+docker compose up -d                                      # start everything, including the backend container
+docker compose stop                                       # stop without deleting containers/volumes
+docker compose down                                       # stop and remove containers + network
 ```
+
+Migrations are **not** run automatically on container start — deliberately, to avoid every replica racing to migrate concurrently in a hypothetical multi-instance setup. Run `docker compose run --rm backend bun run db:migrate` (or `bun run db:migrate` from the host against the same DB) before starting `backend` against a fresh database, or `/v1/mock/users` will fail with "relation does not exist".
+
+## Database
+
+Schema lives in `src/db/schema/` ([Drizzle ORM](https://orm.drizzle.team), Postgres dialect), connected via `src/db/client.ts` using Bun's built-in `Bun.sql` (`drizzle-orm/bun-sql` driver — no extra DB driver dependency).
+
+```bash
+bun run db:generate   # after changing src/db/schema/, generate a migration into src/db/migrations/
+bun run db:migrate    # apply pending migrations to DATABASE_URL
+bun run db:studio     # browse the DB in Drizzle Studio
+```
+
+Migration files in `src/db/migrations/` are committed to git — never hand-edit one that's already been applied; generate a new migration instead. Triggers and other things Drizzle's schema builder can't express live in hand-written **custom migrations** (`bunx drizzle-kit generate --custom --name=<name>`) — see `0001_triggers.sql`. `seeds/triggers.sql` is a reference copy only; it's not applied to the database.
+
+`mock_users` is a demo-only table kept separate from the real business schema (`user`, `branch`, `supplier`, `product`, `order`, ...) — it exists purely so the `/mock/users` routes can demonstrate the full DB-backed pattern. See [CONTRIBUTING.md](./CONTRIBUTING.md) for the distinction.
+
+`bun run db:seed:mock-users` truncates and reseeds `mock_users` with a fixed set of names (`seeds/mock_users.sql`). `bun test` writes to this same table but tracks and deletes only the rows it creates (see [Testing](#testing)) — seeded/unrelated rows aren't touched.
 
 ## Pre-commit
 
@@ -101,4 +127,7 @@ Tests live under `test/`, mirroring `src/`'s structure (not colocated). Route te
 
 ## Not yet wired up
 
-`better-auth` and `drizzle-orm`/`drizzle-typebox` are installed as dependencies but not yet configured — there is no database schema or auth setup in this repo yet. `docs/skills/` has reference guides for both, pulled from their official skill docs, for when that work starts.
+- `better-auth` is installed as a dependency but not configured — no auth setup in this repo yet.
+- No real (non-mock) routes exist against the business schema (`user`, `branch`, `product`, `order`, ...) yet — only migrations for it. The `/mock/users` routes are a working DB-backed reference to copy the pattern from, not real endpoints.
+
+`docs/skills/` has a reference guide for Better Auth, pulled from its official skill docs, for when that work starts.
