@@ -5,6 +5,7 @@ import {
   pgTable,
   primaryKey,
   serial,
+  text,
   timestamp,
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
@@ -27,11 +28,11 @@ export const order = pgTable("order", {
   lotId: serial("lot_id").primaryKey(),
   orderType: orderTypeEnum("order_type").notNull(),
   createdAt: createdAtColumn(),
-  userId: integer("user_id")
+  userId: text("user_id")
     .notNull()
-    .references(() => user.userId),
+    .references(() => user.id),
   status: orderStatusEnum("status").notNull().default("pending"),
-  approvedBy: integer("approved_by").references(() => user.userId),
+  approvedBy: text("approved_by").references(() => user.id),
   approvedAt: timestamp("approved_at"),
   updatedAt: updatedAtColumn(),
 });

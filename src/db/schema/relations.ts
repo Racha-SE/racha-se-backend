@@ -1,4 +1,5 @@
 import { relations } from "drizzle-orm";
+import { account, session } from "./auth";
 import { branch } from "./branch";
 import {
   branchOrderDetail,
@@ -18,6 +19,22 @@ export const userRelations = relations(user, ({ one, many }) => ({
   }),
   orders: many(order),
   stockAdjustments: many(stockAdjustment),
+  sessions: many(session),
+  accounts: many(account),
+}));
+
+export const sessionRelations = relations(session, ({ one }) => ({
+  user: one(user, {
+    fields: [session.userId],
+    references: [user.id],
+  }),
+}));
+
+export const accountRelations = relations(account, ({ one }) => ({
+  user: one(user, {
+    fields: [account.userId],
+    references: [user.id],
+  }),
 }));
 
 export const branchRelations = relations(branch, ({ many }) => ({
@@ -63,11 +80,11 @@ export const productCategoryMapRelations = relations(
 export const orderRelations = relations(order, ({ one, many }) => ({
   user: one(user, {
     fields: [order.userId],
-    references: [user.userId],
+    references: [user.id],
   }),
   approver: one(user, {
     fields: [order.approvedBy],
-    references: [user.userId],
+    references: [user.id],
   }),
   headOrderDetails: many(headOrderDetail),
   branchOrderDetails: many(branchOrderDetail),
@@ -141,7 +158,7 @@ export const stockAdjustmentRelations = relations(
     }),
     user: one(user, {
       fields: [stockAdjustment.userId],
-      references: [user.userId],
+      references: [user.id],
     }),
   }),
 );

@@ -15,6 +15,20 @@
       "when": 1786169827073,
       "tag": "0001_triggers",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1786179598577,
+      "tag": "0002_parallel_norman_osborn",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1786182660357,
+      "tag": "0003_smiling_bushwacker",
+      "breakpoints": true
     }
   ]
 }
