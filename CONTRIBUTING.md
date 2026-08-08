@@ -28,7 +28,7 @@ Four layers, one direction of dependency only — never import "up" the list:
 ## Models
 
 - A model file exports a plain object grouping its schemas (`UserModel = { entity, params, createBody }`), not an Elysia `.model()` plugin. Chosen deliberately over the Elysia plugin pattern to keep schemas usable as plain values (`t.Array(UserModel.entity)`, `Static<typeof UserModel.entity>`) without needing string-ref lookups.
-- Don't hand-write DB-derived schemas field-by-field once real Drizzle tables exist — use `createSelectSchema`/`createInsertSchema` from `drizzle-typebox`. There is currently no `spread()`/`spreads()` helper for pulling `.properties` out of those into a composed `t.Object` — add one in `src/utils/` **only once** there's an actual Drizzle table and a real duplication problem to solve. Don't add it speculatively.
+- Don't hand-write DB-derived schemas field-by-field — use `createSelectSchema`/`createInsertSchema` from `drizzle-typebox` (see `src/models/user.model.ts`) and narrow with `t.Pick`/`t.Omit` for `params`/`createBody`. No `spread()`/`spreads()` helper exists for merging fields from _multiple_ schemas into one `t.Object` — `t.Pick`/`t.Omit` on a single schema has covered every case so far. Only add `spread()` in `src/utils/` if a model genuinely needs to mix fields from more than one table schema.
 
 ## Path aliases
 
@@ -40,6 +40,17 @@ Four layers, one direction of dependency only — never import "up" the list:
 
 - Anything that's a demo/reference, not real product code, is gated behind `process.env.NODE_ENV === "development"` in `src/index.ts` — see how `mockRoute` is mounted. It must never be reachable when `NODE_ENV` is unset or `"production"`.
 - Prefix such routes with `/mock` so it's obvious from the URL alone that it's not real.
+- `mock.route.ts`/`user.service.ts` query a real table (`mockUsersTable` in `src/db/schema/mock_users.ts`) through Drizzle — it's a working example of the full DB-backed pattern (model derived via `drizzle-typebox`, async service, real queries), kept deliberately separate from the real business tables (`user`, `branch`, `product`, `order`, ...) so demo traffic never touches them. When you build a real (non-mock) route against the real schema, copy this pattern, not the old in-memory-array one.
+
+## Database
+
+- `src/db/schema/` holds every table, one file per domain (`user.ts`, `branch.ts`, `supplier.ts`, `product.ts` — includes `productCategory`/`productCategoryMap`, `order.ts` — includes the 3 order-detail tables, `stock_adjustment.ts`, `mock_users.ts`). `helpers.ts` has the shared `createdAt`/`updatedAt` column builders (as _functions_ — Drizzle column builders attach to one table internally, so a shared static object would corrupt every table that reused it). All `relations(...)` live together in `relations.ts`, not colocated with their tables. `index.ts` re-exports everything — same barrel pattern as `src/utils/`. Import from `@/db/schema`, not a specific file inside it, unless you're another file within `src/db/schema/` itself.
+- `src/db/client.ts` exports `db`, built with `drizzle-orm/bun-sql` (Bun's native `Bun.sql`, no extra driver dependency). Import `db` from there — don't construct a second client anywhere.
+- `postgres` is a **devDependency**, not something the app itself uses — `drizzle-kit`'s own CLI (`generate`/`migrate`/`studio`) needs it internally regardless of which driver `src/db/client.ts` uses. Don't remove it thinking it's dead weight; `bun run db:migrate` breaks without it. This was caught by a `bun install --frozen-lockfile` inside a Docker build failing with "please install pg/postgres" — the package existed in a dev machine's `node_modules` from a stray non-frozen install but was never actually in `bun.lock`, so it silently worked on that machine and nowhere else. If a DB script mysteriously works locally but fails in CI/Docker, suspect exactly this.
+- Changed the schema? `bun run db:generate` then `bun run db:migrate` (see README). Never hand-edit a migration file that's already been applied; generate a new one.
+- Tests that write through `db` (e.g. `test/services/user.service.test.ts`, `test/routes/mock.route.test.ts`) hit the real dev Postgres, not a mock/in-memory stand-in — they use `crypto.randomUUID()` in test data to avoid colliding with leftover rows from a previous run, and clean up in `afterAll` by **tracking the exact ids they create** and deleting only those (`db.delete(table).where(inArray(table.id, createdIds))`). Don't `db.delete(table)` with no `where` — that deletes every row in the table, including seed data (`seeds/mock_users.sql`) and anything else that happens to be there. Follow the id-tracking pattern for new DB-backed tests.
+- Constructs the Drizzle schema builder can't express (triggers, stored procedures) go in a **custom migration** — `bunx drizzle-kit generate --custom --name=<name>` makes an empty file in `src/db/migrations/`; write raw SQL into it. `src/db/migrations/0001_triggers.sql` is the example. `seeds/triggers.sql` is a **reference copy only** — it says so at the top of the file — editing it does nothing to the database; edit the migration (or generate a new one) instead.
+- `seeds/` is at the repo root, not under `src/db/` — seed data (`mock_users.sql`) isn't schema, so it doesn't live alongside `src/db/schema/`/`src/db/migrations/`.
 
 ## Testing
 
@@ -51,6 +62,7 @@ Four layers, one direction of dependency only — never import "up" the list:
 
 - Ports are intentionally non-default (`6767` backend, `6969` Postgres, `6769` Adminer) specifically to avoid clashing with other projects running locally at the same time. Don't "fix" them back to `3000`/`5432`.
 - All services sit on a fixed-name bridge network (`racha-se-network`, not project-prefixed) so a separate frontend repo can join it later via `networks: { racha-se-network: { external: true } }`. Don't let Compose auto-generate the network name.
+- The `backend` image does **not** run migrations on container start — deliberately, to keep "run a migration" a separate, explicit, human-triggered step rather than something that happens implicitly (and potentially races across replicas) every time the container boots. Run `docker compose run --rm backend bun run db:migrate` before the backend needs a fresh table. Don't add `db:migrate` back into the `Dockerfile`'s `CMD` — it was tried and deliberately reverted (see git history).
 
 ## Git / commits
 
@@ -66,4 +78,4 @@ Four layers, one direction of dependency only — never import "up" the list:
 
 ## General
 
-- No premature abstraction. Several things in this repo were deliberately _not_ built ahead of need — e.g. no `spread()` schema helper until there's a real Drizzle table, no `tAppErrors()` multi-code-schema merger until routes actually need it. If you're about to add a generic helper "for later," don't — wait until there are two real call sites.
+- No premature abstraction. Several things in this repo were deliberately _not_ built ahead of need — e.g. no `spread()` multi-schema-merge helper (`t.Pick`/`t.Omit` on a single schema has been enough so far, even with real Drizzle tables), no `tAppErrors()` multi-code-schema merger until routes actually need it. If you're about to add a generic helper "for later," don't — wait until there are two real call sites.
