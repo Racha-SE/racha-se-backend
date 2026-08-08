@@ -1,14 +1,19 @@
 import { Elysia } from "elysia";
 import { errorHandler } from "@/plugins/error-handler";
+import { authRoute } from "@/routes/auth.route";
 import { healthRoute } from "@/routes/health.route";
 import { mockRoute } from "@/routes/mock.route";
 
-const app = new Elysia({ prefix: "/v1" }).use(errorHandler).use(healthRoute);
+const app = new Elysia().use(authRoute).group("/v1", (app) => {
+  app.use(errorHandler).use(healthRoute);
 
-// mock routes exist only to demonstrate the architecture — never expose them outside dev
-if (process.env.NODE_ENV === "development") {
-  app.use(mockRoute);
-}
+  // mock routes exist only to demonstrate the architecture — never expose them outside dev
+  if (process.env.NODE_ENV === "development") {
+    app.use(mockRoute);
+  }
+
+  return app;
+});
 
 app.listen(3000);
 
