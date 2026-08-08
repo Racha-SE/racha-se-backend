@@ -3,8 +3,7 @@ import { Elysia } from "elysia";
 import { inArray } from "drizzle-orm";
 import { db } from "@/db/client";
 import { user } from "@/db/schema";
-import { authRoute } from "@/routes/auth.route";
-import { mockAuthRoute } from "@/routes/mock-auth.route";
+import { authRoute, mockAuthRoute } from "@/routes";
 import { auth } from "@/utils";
 
 // authRoute is needed too — sign-in in the test helper below goes through

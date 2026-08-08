@@ -8,7 +8,7 @@ Four layers, one direction of dependency only — never import "up" the list:
 
 - **`src/models/`** — `t.Object` schemas + derived TS types (via `Static<...>`). No logic, no imports from services/routes.
 - **`src/services/`** — business logic. Imports models + utils. Throws `AppError` on failure, never returns an error object or throws a bare `Error`.
-- **`src/routes/`** — HTTP layer only. Validates input (via model schemas), calls a service, wraps the result with `successResponse`/`tSuccessResponse`. No business logic here — if a route handler is more than a few lines, that logic belongs in a service.
+- **`src/routes/`** — HTTP layer only. Validates input (via model schemas), calls a service, wraps the result with `successResponse`/`tSuccessResponse`. No business logic here — if a route handler is more than a few lines, that logic belongs in a service. `index.ts` re-exports every route — same barrel pattern as `src/utils/`. Import via `@/routes` from outside the directory.
 - **`src/utils/`** — cross-cutting helpers with no knowledge of any specific domain (`error.ts`, `response.ts`). Import via the barrel `@/utils`, not the individual file, from outside `src/utils/`. Inside `src/utils/`, same-directory imports stay relative (`./error`), not through the barrel — avoids a self-referential import.
 - **`src/plugins/`** — Elysia plugins meant to be `.use()`'d by the app or by tests (e.g. `error-handler.ts`). If a plugin only adds a lifecycle hook (like `onError`) and no routes, it must call `.as("global")` — Elysia scopes plugin hooks locally by default, so without it the hook silently stops catching errors thrown by routes mounted from a different plugin. This bit us once already.
 
