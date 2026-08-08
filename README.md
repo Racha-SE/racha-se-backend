@@ -49,19 +49,45 @@ The API is now at `http://localhost:3000/v1`.
 | `bun run db:migrate`         | Apply pending migrations to `DATABASE_URL`                                              |
 | `bun run db:studio`          | Open [Drizzle Studio](https://orm.drizzle.team/drizzle-studio/overview) (DB browser UI) |
 | `bun run db:seed:mock-users` | Reset `mock_users` to a fixed set of 9 names (`seeds/mock_users.sql`)                   |
+| `bun run create-admin`       | One-off: create the first admin account (see "Authentication" below)                    |
 
 ## Routes
 
-All routes are mounted under `/v1`.
+All routes are mounted under `/v1`, except `/api/auth/*` (better-auth's own routes — see "Authentication" below, kept unversioned on purpose).
 
-| Route                    | Notes                                                                           |
-| ------------------------ | ------------------------------------------------------------------------------- |
-| `GET /v1/health`         | Always on — liveness check                                                      |
-| `GET /v1/mock/users`     | **Dev-only** (`NODE_ENV=development`) — real DB-backed reference implementation |
-| `GET /v1/mock/users/:id` | Dev-only                                                                        |
-| `POST /v1/mock/users`    | Dev-only                                                                        |
+| Route                       | Notes                                                                           |
+| --------------------------- | ------------------------------------------------------------------------------- |
+| `GET /v1/health`            | Always on — liveness check                                                      |
+| `GET /v1/mock/users`        | **Dev-only** (`NODE_ENV=development`) — real DB-backed reference implementation |
+| `GET /v1/mock/users/:id`    | Dev-only                                                                        |
+| `POST /v1/mock/users`       | Dev-only                                                                        |
+| `GET /v1/mock/auth/me`      | Dev-only — demonstrates the `auth` macro, any signed-in user                    |
+| `GET /v1/mock/auth/hq-only` | Dev-only — demonstrates userType-gated `auth` macro (`hq` only)                 |
 
 The `mock` routes exist to show the intended architecture end-to-end (model → service → route, backed by a real `mock_users` table via Drizzle) — but they're not part of the real product schema. See [CONTRIBUTING.md](./CONTRIBUTING.md) before adding real routes.
+
+## Authentication
+
+[better-auth](https://better-auth.com) (`src/utils/auth.ts`), mounted at `/api/auth/*` (`src/routes/auth.route.ts`) — email/password sessions, backed by the real `user`/`session`/`account`/`verification` tables (`src/db/schema/auth.ts`, merged into `user.ts`).
+
+This is a warehouse system — accounts are provisioned by an admin, not self-service:
+
+- Public sign-up (`POST /api/auth/sign-up/email`) is disabled (`emailAndPassword.disableSignUp`).
+- Accounts are created via `POST /api/auth/admin/create-user` (from the [admin plugin](https://better-auth.com/docs/plugins/admin)), which requires an existing session with `role: "admin"`.
+- `role` (`admin`/`user`) only gates the admin API — it's separate from `userType` (`hq`/`branch`/`cashier`/`customer`), the business role used everywhere else (see `src/plugins/auth.plugin.ts`'s `auth` macro, gated on `userType`).
+
+**Bootstrapping the first admin** — since account creation itself requires an admin, the very first one has to be created outside the HTTP layer:
+
+```bash
+ADMIN_EMAIL=admin@example.com \
+ADMIN_PASSWORD=change-me-immediately \
+ADMIN_FIRSTNAME=Admin \
+ADMIN_LASTNAME=User \
+ADMIN_USERNAME=admin \
+bun run create-admin
+```
+
+Run once per environment (it checks for an existing `role: "admin"` user and refuses if one already exists). After that, sign in as this admin and use `POST /api/auth/admin/create-user` for every other account.
 
 ## Docker
 
@@ -127,7 +153,6 @@ Tests live under `test/`, mirroring `src/`'s structure (not colocated). Route te
 
 ## Not yet wired up
 
-- `better-auth` is installed as a dependency but not configured — no auth setup in this repo yet.
-- No real (non-mock) routes exist against the business schema (`user`, `branch`, `product`, `order`, ...) yet — only migrations for it. The `/mock/users` routes are a working DB-backed reference to copy the pattern from, not real endpoints.
+- No real (non-mock) routes exist against the business schema (`user`, `branch`, `product`, `order`, ...) yet — only migrations for it, plus auth. The `/mock/users` and `/mock/auth` routes are working references to copy the pattern from, not real endpoints.
 
-`docs/skills/` has a reference guide for Better Auth, pulled from its official skill docs, for when that work starts.
+`docs/skills/` has a reference guide for Better Auth, pulled from its official skill docs.
