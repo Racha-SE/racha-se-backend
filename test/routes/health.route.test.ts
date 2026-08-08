@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { Elysia } from "elysia";
-import { healthRoute } from "@/routes/health.route";
+import { healthRoute } from "@/routes";
 import type { SuccessResponse } from "@/utils";
 
 const app = new Elysia().use(healthRoute);

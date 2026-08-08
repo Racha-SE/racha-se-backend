@@ -5,7 +5,7 @@ import { db } from "@/db/client";
 import { mockUsersTable } from "@/db/schema";
 import type { User } from "@/models/user.model";
 import { errorHandler } from "@/plugins/error-handler";
-import { mockRoute } from "@/routes/mock.route";
+import { mockRoute } from "@/routes";
 import type { ErrorResponse, SuccessResponse } from "@/utils";
 
 // same composition as the real app (src/index.ts), minus the dev-only gate,

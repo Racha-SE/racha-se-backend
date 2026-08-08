@@ -3,7 +3,7 @@ import { Elysia } from "elysia";
 import { inArray } from "drizzle-orm";
 import { db } from "@/db/client";
 import { user } from "@/db/schema";
-import { authRoute } from "@/routes/auth.route";
+import { authRoute } from "@/routes";
 import { auth } from "@/utils";
 
 const app = new Elysia().use(authRoute);

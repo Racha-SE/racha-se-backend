@@ -1,9 +1,6 @@
 import { Elysia } from "elysia";
 import { errorHandler } from "@/plugins/error-handler";
-import { authRoute } from "@/routes/auth.route";
-import { healthRoute } from "@/routes/health.route";
-import { mockAuthRoute } from "@/routes/mock-auth.route";
-import { mockRoute } from "@/routes/mock.route";
+import { authRoute, healthRoute, mockAuthRoute, mockRoute } from "@/routes";
 
 const app = new Elysia().use(authRoute).group("/v1", (app) => {
   app.use(errorHandler).use(healthRoute);
