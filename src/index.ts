@@ -1,4 +1,5 @@
 import { cors } from "@elysiajs/cors";
+import { openapi } from "@elysiajs/openapi";
 import { Elysia } from "elysia";
 import { errorHandler } from "@/plugins/error-handler";
 import { authRoute, healthRoute, mockAuthRoute, mockRoute } from "@/routes";
@@ -10,6 +11,17 @@ const app = new Elysia()
       credentials: true,
       methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
       allowedHeaders: ["Content-Type", "Authorization"],
+    }),
+  )
+  .use(
+    openapi({
+      provider: "scalar", // scalar | swagger-ui
+      documentation: {
+        info: {
+          title: "racha-se-backend",
+          version: "1.0.0",
+        },
+      },
     }),
   )
   .use(authRoute)
