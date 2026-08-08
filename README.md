@@ -89,6 +89,8 @@ bun run create-admin
 
 Run once per environment (it checks for an existing `role: "admin"` user and refuses if one already exists). After that, sign in as this admin and use `POST /api/auth/admin/create-user` for every other account.
 
+**CORS** — `CORS_ORIGIN` (env var, currently a placeholder — no frontend yet) controls both `@elysiajs/cors` and better-auth's `trustedOrigins`; they're separate mechanisms that happen to share the same value. `credentials: true` is set, so it must be an exact origin, not `*`.
+
 ## Docker
 
 `docker-compose.yml` runs three services, all on a fixed bridge network (`racha-se-network`) so a future frontend repo can join it directly (`networks: { racha-se-network: { external: true } }`):
@@ -156,7 +158,3 @@ Tests live under `test/`, mirroring `src/`'s structure (not colocated). Route te
 - No real (non-mock) routes exist against the business schema (`user`, `branch`, `product`, `order`, ...) yet — only migrations for it, plus auth. The `/mock/users` and `/mock/auth` routes are working references to copy the pattern from, not real endpoints.
 
 `docs/skills/` has a reference guide for Better Auth, pulled from its official skill docs.
-
-## CORS
-
-`CORS_ORIGIN` (env var) controls both the browser-facing CORS policy (`@elysiajs/cors`, `src/index.ts`) and better-auth's own `trustedOrigins` (`src/utils/auth.ts`, a separate server-side origin allowlist — CORS alone doesn't satisfy it). No frontend exists yet, so it currently points at a placeholder (`http://localhost:3001`) — update it once one does. `credentials: true` is set (required for cookie-based sessions), which means the origin must be an exact value, not `*`.
