@@ -14,7 +14,8 @@
     "format:fix": "prettier --write .",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
-    "db:studio": "drizzle-kit studio"
+    "db:studio": "drizzle-kit studio",
+    "db:seed:mock-users": "docker compose exec -T db psql -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-racha_se} < seeds/mock_users.sql"
   },
   "dependencies": {
     "better-auth": "^1.6.26",
