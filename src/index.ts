@@ -18,9 +18,22 @@ const app = new Elysia()
       provider: "scalar", // scalar | swagger-ui
       documentation: {
         info: {
-          title: "racha-se-backend",
+          title: "Racha SE - Backend",
           version: "1.0.0",
         },
+        tags: [
+          { name: "Health", description: "Liveness checks" },
+          {
+            name: "Mock",
+            description:
+              "Dev-only reference implementation (model/service/route pattern)",
+          },
+          {
+            name: "Mock Auth",
+            description:
+              "Dev-only reference implementation (auth macro pattern)",
+          },
+        ],
       },
     }),
   )

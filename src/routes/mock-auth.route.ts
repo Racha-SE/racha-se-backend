@@ -25,6 +25,12 @@ export const mockAuthRoute = new Elysia({ prefix: "/mock/auth" })
           }),
         ),
       },
+      detail: {
+        summary: "Get current user",
+        description:
+          "Dev-only. Demonstrates the auth macro — any signed-in user, regardless of userType.",
+        tags: ["Mock Auth"],
+      },
     },
   )
   .get(
@@ -35,6 +41,12 @@ export const mockAuthRoute = new Elysia({ prefix: "/mock/auth" })
       auth: ["hq"],
       response: {
         200: tSuccessResponse(t.Object({ message: t.String() })),
+      },
+      detail: {
+        summary: "HQ-only endpoint",
+        description:
+          'Dev-only. Demonstrates userType-gated authorization — only userType "hq" is allowed, 403 otherwise.',
+        tags: ["Mock Auth"],
       },
     },
   );
