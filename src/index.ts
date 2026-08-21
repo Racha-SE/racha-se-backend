@@ -3,6 +3,9 @@ import { openapi } from "@elysiajs/openapi";
 import { Elysia } from "elysia";
 import { errorHandler } from "@/plugins/error-handler";
 import { authRoute, healthRoute, mockAuthRoute, mockRoute } from "@/routes";
+import { getAuthOpenAPIDocumentation } from "@/utils";
+
+const authDocs = await getAuthOpenAPIDocumentation();
 
 const app = new Elysia()
   .use(
@@ -24,6 +27,10 @@ const app = new Elysia()
         tags: [
           { name: "Health", description: "Liveness checks" },
           {
+            name: "Better Auth",
+            description: "Better-auth's own routes, mounted at /api/v1/auth/*",
+          },
+          {
             name: "Mock",
             description:
               "Dev-only reference implementation (model/service/route pattern)",
@@ -34,11 +41,13 @@ const app = new Elysia()
               "Dev-only reference implementation (auth macro pattern)",
           },
         ],
+        paths: authDocs.paths,
+        components: authDocs.components,
       },
     }),
   )
   .use(authRoute)
-  .group("/v1", (app) => {
+  .group("/api/v1", (app) => {
     app.use(errorHandler).use(healthRoute);
 
     // mock routes exist only to demonstrate the architecture — never expose them outside dev

@@ -7,7 +7,7 @@ import { authRoute, mockAuthRoute } from "@/routes";
 import { auth } from "@/utils";
 
 // authRoute is needed too — sign-in in the test helper below goes through
-// the real /api/auth/sign-in/email handler, not just the mocked routes.
+// the real /api/v1/auth/sign-in/email handler, not just the mocked routes.
 const app = new Elysia().use(authRoute).use(mockAuthRoute);
 
 // account/session rows cascade-delete via their user_id FK (see
@@ -33,7 +33,7 @@ async function createSignedInUser(userType: "hq" | "customer") {
   createdIds.push(result.user.id);
 
   const signInResponse = await app.handle(
-    new Request("http://localhost/api/auth/sign-in/email", {
+    new Request("http://localhost/api/v1/auth/sign-in/email", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ email, password }),

@@ -15,7 +15,8 @@ export const product = pgTable("product", {
   barcode: varchar("barcode", { length: 255 }).notNull(),
   basePrice: integer("base_price").notNull(),
   costPrice: integer("cost_price").notNull().default(0),
-  minStockLevel: integer("min_stock_level").notNull().default(0),
+  minStockHq: integer("min_stock_hq").notNull().default(0),
+  minStockBranch: integer("min_stock_branch").notNull().default(0),
   ...timestamps(),
 });
 

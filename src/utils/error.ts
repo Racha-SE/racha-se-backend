@@ -4,13 +4,14 @@
  * error scenario that may occur during API requests.
  */
 export const AppErrorCode = {
-  BAD_REQUEST: 400,
-  UNAUTHORIZED: 401,
-  FORBIDDEN: 403,
-  NOT_FOUND: 404,
   ALREADY_EXISTS: 409,
-  VALIDATION: 400,
+  BAD_REQUEST: 400,
+  CATEGORY_IN_USE: 409,
+  FORBIDDEN: 403,
   INTERNAL_SERVER_ERROR: 500,
+  NOT_FOUND: 404,
+  UNAUTHORIZED: 401,
+  VALIDATION: 400,
 } as const;
 
 /** Union of AppErrorCode key names, e.g. "NOT_FOUND". */
