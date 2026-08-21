@@ -32,7 +32,7 @@ bun run db:migrate
 bun run dev
 ```
 
-The API is now at `http://localhost:3000/v1`.
+The API is now at `http://localhost:3000/api/v1`.
 
 ## Scripts
 
@@ -53,27 +53,27 @@ The API is now at `http://localhost:3000/v1`.
 
 ## Routes
 
-All routes are mounted under `/v1`, except `/api/auth/*` (better-auth's own routes — see "Authentication" below, kept unversioned on purpose).
+All routes are mounted under `/api/v1`, including better-auth's own routes (`/api/v1/auth/*`) — better-auth's `.mount()` still has to sit outside the `{ prefix: "/api/v1" }` group (see "Authentication" below and CONTRIBUTING.md), but its own `basePath` is configured to `/api/v1/auth` so the URL still ends up versioned the same as everything else.
 
-| Route                       | Notes                                                                           |
-| --------------------------- | ------------------------------------------------------------------------------- |
-| `GET /v1/health`            | Always on — liveness check                                                      |
-| `GET /v1/mock/users`        | **Dev-only** (`NODE_ENV=development`) — real DB-backed reference implementation |
-| `GET /v1/mock/users/:id`    | Dev-only                                                                        |
-| `POST /v1/mock/users`       | Dev-only                                                                        |
-| `GET /v1/mock/auth/me`      | Dev-only — demonstrates the `auth` macro, any signed-in user                    |
-| `GET /v1/mock/auth/hq-only` | Dev-only — demonstrates userType-gated `auth` macro (`hq` only)                 |
+| Route                           | Notes                                                                           |
+| ------------------------------- | ------------------------------------------------------------------------------- |
+| `GET /api/v1/health`            | Always on — liveness check                                                      |
+| `GET /api/v1/mock/users`        | **Dev-only** (`NODE_ENV=development`) — real DB-backed reference implementation |
+| `GET /api/v1/mock/users/:id`    | Dev-only                                                                        |
+| `POST /api/v1/mock/users`       | Dev-only                                                                        |
+| `GET /api/v1/mock/auth/me`      | Dev-only — demonstrates the `auth` macro, any signed-in user                    |
+| `GET /api/v1/mock/auth/hq-only` | Dev-only — demonstrates userType-gated `auth` macro (`hq` only)                 |
 
 The `mock` routes exist to show the intended architecture end-to-end (model → service → route, backed by a real `mock_users` table via Drizzle) — but they're not part of the real product schema. See [CONTRIBUTING.md](./CONTRIBUTING.md) before adding real routes.
 
 ## Authentication
 
-[better-auth](https://better-auth.com) (`src/utils/auth.ts`), mounted at `/api/auth/*` (`src/routes/auth.route.ts`) — email/password sessions, backed by the real `user`/`session`/`account`/`verification` tables (`src/db/schema/auth.ts`, merged into `user.ts`).
+[better-auth](https://better-auth.com) (`src/utils/auth.ts`), mounted at `/api/v1/auth/*` (`src/routes/auth.route.ts`) — email/password sessions, backed by the real `user`/`session`/`account`/`verification` tables (`src/db/schema/auth.ts`, merged into `user.ts`).
 
 This is a warehouse system — accounts are provisioned by an admin, not self-service:
 
-- Public sign-up (`POST /api/auth/sign-up/email`) is disabled (`emailAndPassword.disableSignUp`).
-- Accounts are created via `POST /api/auth/admin/create-user` (from the [admin plugin](https://better-auth.com/docs/plugins/admin)), which requires an existing session with `role: "admin"`.
+- Public sign-up (`POST /api/v1/auth/sign-up/email`) is disabled (`emailAndPassword.disableSignUp`).
+- Accounts are created via `POST /api/v1/auth/admin/create-user` (from the [admin plugin](https://better-auth.com/docs/plugins/admin)), which requires an existing session with `role: "admin"`.
 - `role` (`admin`/`user`) only gates the admin API — it's separate from `userType` (`hq`/`branch`/`cashier`/`customer`), the business role used everywhere else (see `src/plugins/auth.plugin.ts`'s `auth` macro, gated on `userType`).
 
 **Bootstrapping the first admin** — since account creation itself requires an admin, the very first one has to be created outside the HTTP layer:
@@ -87,7 +87,7 @@ ADMIN_USERNAME=admin \
 bun run create-admin
 ```
 
-Run once per environment (it checks for an existing `role: "admin"` user and refuses if one already exists). After that, sign in as this admin and use `POST /api/auth/admin/create-user` for every other account.
+Run once per environment (it checks for an existing `role: "admin"` user and refuses if one already exists). After that, sign in as this admin and use `POST /api/v1/auth/admin/create-user` for every other account.
 
 **CORS** — `CORS_ORIGIN` (env var, currently a placeholder — no frontend yet) controls both `@elysiajs/cors` and better-auth's `trustedOrigins`; they're separate mechanisms that happen to share the same value. `credentials: true` is set, so it must be an exact origin, not `*`.
 
@@ -111,7 +111,7 @@ docker compose stop                                       # stop without deletin
 docker compose down                                       # stop and remove containers + network
 ```
 
-Migrations are **not** run automatically on container start — deliberately, to avoid every replica racing to migrate concurrently in a hypothetical multi-instance setup. Run `docker compose run --rm backend bun run db:migrate` (or `bun run db:migrate` from the host against the same DB) before starting `backend` against a fresh database, or `/v1/mock/users` will fail with "relation does not exist".
+Migrations are **not** run automatically on container start — deliberately, to avoid every replica racing to migrate concurrently in a hypothetical multi-instance setup. Run `docker compose run --rm backend bun run db:migrate` (or `bun run db:migrate` from the host against the same DB) before starting `backend` against a fresh database, or `/api/v1/mock/users` will fail with "relation does not exist".
 
 ## Database
 

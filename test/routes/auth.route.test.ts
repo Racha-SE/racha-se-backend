@@ -23,7 +23,6 @@ interface AuthUser {
   firstname: string;
   lastname: string;
   username: string;
-  isActive: boolean;
   birthdate: string | null;
   branchId: number | null;
 }
@@ -87,7 +86,7 @@ async function createTestUser(
 
 async function signIn(email: string, password: string) {
   const response = await app.handle(
-    new Request("http://localhost/api/auth/sign-in/email", {
+    new Request("http://localhost/api/v1/auth/sign-in/email", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ email, password }),
@@ -103,10 +102,10 @@ afterAll(async () => {
   }
 });
 
-describe("POST /api/auth/sign-up/email", () => {
+describe("POST /api/v1/auth/sign-up/email", () => {
   test("returns 400 — public self sign-up is disabled", async () => {
     const response = await app.handle(
-      new Request("http://localhost/api/auth/sign-up/email", {
+      new Request("http://localhost/api/v1/auth/sign-up/email", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -127,10 +126,10 @@ describe("POST /api/auth/sign-up/email", () => {
   });
 });
 
-describe("POST /api/auth/admin/create-user", () => {
+describe("POST /api/v1/auth/admin/create-user", () => {
   test("returns 401 for an unauthenticated request", async () => {
     const response = await app.handle(
-      new Request("http://localhost/api/auth/admin/create-user", {
+      new Request("http://localhost/api/v1/auth/admin/create-user", {
         method: "POST",
         headers: { "Content-Type": "application/json", Origin: ORIGIN },
         body: JSON.stringify({
@@ -155,7 +154,7 @@ describe("POST /api/auth/admin/create-user", () => {
     const { cookie } = await signIn(nonAdmin.email, nonAdmin.password);
 
     const response = await app.handle(
-      new Request("http://localhost/api/auth/admin/create-user", {
+      new Request("http://localhost/api/v1/auth/admin/create-user", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -188,7 +187,7 @@ describe("POST /api/auth/admin/create-user", () => {
     const consoleError = spyOn(console, "error").mockImplementation(() => {});
 
     const response = await app.handle(
-      new Request("http://localhost/api/auth/admin/create-user", {
+      new Request("http://localhost/api/v1/auth/admin/create-user", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -220,7 +219,7 @@ describe("POST /api/auth/admin/create-user", () => {
     const { cookie } = await signIn(admin.email, admin.password);
 
     const response = await app.handle(
-      new Request("http://localhost/api/auth/admin/create-user", {
+      new Request("http://localhost/api/v1/auth/admin/create-user", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -255,7 +254,7 @@ describe("POST /api/auth/admin/create-user", () => {
   });
 });
 
-describe("POST /api/auth/sign-in/email", () => {
+describe("POST /api/v1/auth/sign-in/email", () => {
   test("returns a session token for correct credentials", async () => {
     const { email, password } = await createTestUser();
 
@@ -278,13 +277,13 @@ describe("POST /api/auth/sign-in/email", () => {
   });
 });
 
-describe("GET /api/auth/get-session", () => {
+describe("GET /api/v1/auth/get-session", () => {
   test("returns the session and user for a signed-in request", async () => {
     const { email, password } = await createTestUser();
     const { cookie } = await signIn(email, password);
 
     const response = await app.handle(
-      new Request("http://localhost/api/auth/get-session", {
+      new Request("http://localhost/api/v1/auth/get-session", {
         headers: cookie ? { Cookie: cookie } : {},
       }),
     );
@@ -297,7 +296,7 @@ describe("GET /api/auth/get-session", () => {
 
   test("returns an empty body when there is no session", async () => {
     const response = await app.handle(
-      new Request("http://localhost/api/auth/get-session"),
+      new Request("http://localhost/api/v1/auth/get-session"),
     );
     const body = await response.text();
 
@@ -306,13 +305,13 @@ describe("GET /api/auth/get-session", () => {
   });
 });
 
-describe("POST /api/auth/sign-out", () => {
+describe("POST /api/v1/auth/sign-out", () => {
   test("invalidates the session", async () => {
     const { email, password } = await createTestUser();
     const { cookie } = await signIn(email, password);
 
     const signOutResponse = await app.handle(
-      new Request("http://localhost/api/auth/sign-out", {
+      new Request("http://localhost/api/v1/auth/sign-out", {
         method: "POST",
         headers: { Origin: ORIGIN, Cookie: cookie ?? "" },
       }),
@@ -323,7 +322,7 @@ describe("POST /api/auth/sign-out", () => {
     expect(signOutBody.success).toBe(true);
 
     const sessionResponse = await app.handle(
-      new Request("http://localhost/api/auth/get-session", {
+      new Request("http://localhost/api/v1/auth/get-session", {
         headers: cookie ? { Cookie: cookie } : {},
       }),
     );
@@ -334,14 +333,14 @@ describe("POST /api/auth/sign-out", () => {
   });
 });
 
-describe("POST /api/auth/change-password", () => {
+describe("POST /api/v1/auth/change-password", () => {
   test("changes the password and invalidates the old one", async () => {
     const { email, password } = await createTestUser();
     const { cookie } = await signIn(email, password);
     const newPassword = "newpassword456";
 
     const changeResponse = await app.handle(
-      new Request("http://localhost/api/auth/change-password", {
+      new Request("http://localhost/api/v1/auth/change-password", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -369,7 +368,7 @@ describe("POST /api/auth/change-password", () => {
     const { cookie } = await signIn(email, password);
 
     const response = await app.handle(
-      new Request("http://localhost/api/auth/change-password", {
+      new Request("http://localhost/api/v1/auth/change-password", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

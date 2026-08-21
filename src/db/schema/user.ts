@@ -46,7 +46,6 @@ export const user = pgTable(
     firstname: varchar("firstname", { length: 255 }).notNull(),
     lastname: varchar("lastname", { length: 255 }).notNull(),
     username: varchar("username", { length: 255 }).notNull().unique(),
-    isActive: boolean("is_active").notNull(),
     birthdate: varchar("birthdate", { length: 255 }),
     branchId: integer("branch_id").references(() => branch.branchId),
 
