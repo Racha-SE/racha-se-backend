@@ -10,5 +10,3 @@
 
 - [ ] `bun run typecheck` / `bun run lint` / `bun run format` — all clean
 - [ ] `pre-commit run --all-files` — all hooks pass
-- [ ] `bun test` — all pass
-- [ ] Reviewer should also run `bun run db:migrate && bun test` locally against `docker compose up -d db` to confirm

@@ -39,7 +39,6 @@ The API is now at `http://localhost:3000/api/v1`.
 | Command                      | What it does                                                                            |
 | ---------------------------- | --------------------------------------------------------------------------------------- |
 | `bun run dev`                | Start the dev server with `--watch` (`NODE_ENV=development`)                            |
-| `bun test`                   | Run the test suite                                                                      |
 | `bun run typecheck`          | `tsc --noEmit`                                                                          |
 | `bun run lint`               | `eslint .`                                                                              |
 | `bun run lint:fix`           | `eslint --fix .`                                                                        |
@@ -127,7 +126,7 @@ Migration files in `src/db/migrations/` are committed to git — never hand-edit
 
 `mock_users` is a demo-only table kept separate from the real business schema (`user`, `branch`, `supplier`, `product`, `order`, ...) — it exists purely so the `/mock/users` routes can demonstrate the full DB-backed pattern. See [CONTRIBUTING.md](./CONTRIBUTING.md) for the distinction.
 
-`bun run db:seed:mock-users` truncates and reseeds `mock_users` with a fixed set of names (`seeds/mock_users.sql`). `bun test` writes to this same table but tracks and deletes only the rows it creates (see [Testing](#testing)) — seeded/unrelated rows aren't touched.
+`bun run db:seed:mock-users` truncates and reseeds `mock_users` with a fixed set of names (`seeds/mock_users.sql`).
 
 ## Pre-commit
 
@@ -144,14 +143,6 @@ pre-commit run --all-files
 ```
 
 CI (`.github/workflows/ci.yml`) runs the exact same `pre-commit run --all-files`, so nothing that passes locally should ever fail in CI, and vice versa.
-
-## Testing
-
-```bash
-bun test
-```
-
-Tests live under `test/`, mirroring `src/`'s structure (not colocated). Route tests build a minimal Elysia instance (`errorHandler` + the route under test) via `app.handle(new Request(...))` — no real network calls, no server actually listening.
 
 ## Not yet wired up
 

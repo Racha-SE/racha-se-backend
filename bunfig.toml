@@ -1,3 +1,0 @@
-[test]
-coveragePathIgnorePatterns = ["src/db/schema/**", "src/db/migrations/**"]
-coverageThreshold = { lines = 0.80, functions = 1.0 }

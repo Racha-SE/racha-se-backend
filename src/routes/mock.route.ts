@@ -1,5 +1,5 @@
 import { Elysia, t } from "elysia";
-import { UserModel } from "@/models/user.model";
+import { UserModel } from "@/models/mock-users.model";
 import { userService } from "@/services/user.service";
 import { successResponse, tErrorResponse, tSuccessResponse } from "@/utils";
 
