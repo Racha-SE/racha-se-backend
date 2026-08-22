@@ -1,4 +1,5 @@
 import {
+  boolean,
   integer,
   pgTable,
   primaryKey,
@@ -13,10 +14,9 @@ export const product = pgTable("product", {
   name: varchar("name", { length: 255 }).notNull(),
   description: text("description"),
   barcode: varchar("barcode", { length: 255 }).notNull(),
-  basePrice: integer("base_price").notNull(),
-  costPrice: integer("cost_price").notNull().default(0),
   minStockHq: integer("min_stock_hq").notNull().default(0),
   minStockBranch: integer("min_stock_branch").notNull().default(0),
+  isActive: boolean("is_active").notNull().default(true),
   ...timestamps(),
 });
 
