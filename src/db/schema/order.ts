@@ -21,7 +21,7 @@ export const orderStatusEnum = pgEnum("order_status", [
   "pending",
   "approved",
   "rejected",
-  "completed",
+  "completed", // branch only
 ]);
 
 export const order = pgTable("order", {
@@ -53,7 +53,8 @@ export const headOrderDetail = pgTable(
     pId: integer("p_id")
       .notNull()
       .references(() => product.pId),
-    unitCost: integer("unit_cost").notNull().default(0),
+    basePrice: integer("base_price").notNull().default(0),
+    costPrice: integer("cost_price").notNull().default(0),
     ...timestamps(),
   },
   (table) => ({
@@ -84,8 +85,8 @@ export const customerOrderDetail = pgTable(
     pId: integer("p_id")
       .notNull()
       .references(() => product.pId),
-    unitPrice: integer("unit_price").notNull().default(0),
-    unitCost: integer("unit_cost").notNull().default(0),
+    basePrice: integer("unit_price").notNull().default(0),
+    costPrice: integer("unit_cost").notNull().default(0),
     ...timestamps(),
   },
   (table) => ({
@@ -113,6 +114,8 @@ export const branchOrderDetail = pgTable(
     pId: integer("p_id")
       .notNull()
       .references(() => product.pId),
+    basePrice: integer("base_price").notNull().default(0),
+    costPrice: integer("cost_price").notNull().default(0),
     ...timestamps(),
   },
   (table) => ({
