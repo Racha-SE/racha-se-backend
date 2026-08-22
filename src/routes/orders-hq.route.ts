@@ -1,0 +1,25 @@
+import { Elysia, t } from "elysia";
+import { authPlugin } from "@/plugins/auth.plugin";
+import { OrdersHqModel } from "@/models/orders-hq.model";
+import { ordersHqService } from "@/services/orders-hq.service";
+import { successResponse, tSuccessResponse } from "@/utils";
+
+const stubResponse = { 200: tSuccessResponse(t.Object({ result: t.Null() })) };
+
+export const ordersHqRoute = new Elysia({ prefix: "/orders/hq" })
+  .use(authPlugin)
+  .post(
+    "/",
+    async () => successResponse({ result: await ordersHqService.create() }),
+    {
+      auth: true, // change later
+      body: OrdersHqModel.createBody,
+      response: stubResponse,
+      detail: {
+        summary: "Add a new HQ order",
+        description:
+          "HQ Admin adds a supplier order with line items directly into HQ warehouse stock - no approval step, since the same hq userType would both create and approve it; stock is available immediately.",
+        tags: ["Orders HQ"],
+      },
+    },
+  );
