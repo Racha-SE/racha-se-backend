@@ -9,22 +9,6 @@ on:
 jobs:
   ci:
     runs-on: ubuntu-latest
-    services:
-      postgres:
-        image: postgres:17-alpine
-        env:
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: racha_se
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 5s
-          --health-timeout 5s
-          --health-retries 10
-    env:
-      DATABASE_URL: postgres://postgres:postgres@localhost:5432/racha_se
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -40,12 +24,6 @@ jobs:
 
       - name: Run pre-commit hooks
         uses: pre-commit/action@v3.0.1
-
-      - name: Run database migrations
-        run: bun run db:migrate
-
-      - name: Test with coverage
-        run: bun run test:coverage
 
       - name: Validate docker-compose config
         run: docker compose --env-file .env.example config

@@ -1,7 +1,7 @@
 import { eq } from "drizzle-orm";
 import { db } from "@/db/client";
 import { mockUsersTable } from "@/db/schema";
-import type { User } from "@/models/user.model";
+import type { User } from "@/models/mock-users.model";
 import { AppError } from "@/utils";
 
 export const userService = {

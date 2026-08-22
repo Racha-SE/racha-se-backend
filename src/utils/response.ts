@@ -10,11 +10,6 @@ export function successResponse<T extends Record<string, unknown>>(data: T) {
   return { success: true as const, data };
 }
 
-/** Shape returned by {@link successResponse} — reuse to type a parsed response body. */
-export type SuccessResponse<T extends Record<string, unknown>> = ReturnType<
-  typeof successResponse<T>
->;
-
 /**
  * Standard error envelope for API responses. Usually you don't call this
  * directly — throw an {@link AppError} instead and let the global `onError`
@@ -26,11 +21,6 @@ export function errorResponse<T extends AppErrorCode>(
 ) {
   return { success: false as const, error: { code, context } };
 }
-
-/** Shape returned by {@link errorResponse} — reuse to type a parsed response body. */
-export type ErrorResponse<T extends AppErrorCode> = ReturnType<
-  typeof errorResponse<T>
->;
 
 /**
  * Success response schema for a route's `response` option.
