@@ -18,12 +18,4 @@ export const productsService = {
   deactivate(): Promise<null> {
     return Promise.resolve(null);
   },
-
-  attachCategories(): Promise<null> {
-    return Promise.resolve(null);
-  },
-
-  detachCategory(): Promise<null> {
-    return Promise.resolve(null);
-  },
 };

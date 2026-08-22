@@ -9,12 +9,11 @@ const body = t.Omit(insertSchema, ["pId", "createdAt", "updatedAt"]);
 export const ProductsModel = {
   entity,
   params: t.Object({ id: t.Numeric() }),
-  categoryParams: t.Object({ id: t.Numeric(), categoryId: t.Numeric() }),
   createBody: body,
-  updateBody: t.Partial(body),
-  attachCategoriesBody: t.Object({
-    categoryIds: t.Array(t.Number(), { minItems: 1 }),
-  }),
+  updateBody: t.Composite([
+    t.Partial(body),
+    t.Object({ categoryIds: t.Optional(t.Array(t.Number(), { minItems: 1 })) }),
+  ]),
 };
 
 export type Product = Static<typeof ProductsModel.entity>;

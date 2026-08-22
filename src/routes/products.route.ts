@@ -62,7 +62,7 @@ export const productsRoute = new Elysia({ prefix: "/products" })
       detail: {
         summary: "Update a product",
         description:
-          "Edit product fields including, minStockHq, and minStockBranch; existing orders keep their own snapshotted price/cost.",
+          "Edit product fields including minStockHq and minStockBranch, and/or replace its category links via categoryIds; existing orders keep their own snapshotted price/cost.",
         tags: ["Products"],
       },
     },
@@ -77,39 +77,6 @@ export const productsRoute = new Elysia({ prefix: "/products" })
       detail: {
         summary: "Deactivate a product",
         description: "Change isActive to false",
-        tags: ["Products"],
-      },
-    },
-  )
-  .post(
-    "/:id/categories",
-    async () =>
-      successResponse({ result: await productsService.attachCategories() }),
-    {
-      auth: true, // change later
-      params: ProductsModel.params,
-      body: ProductsModel.attachCategoriesBody,
-      response: stubResponse,
-      detail: {
-        summary: "Attach a product to categories",
-        description:
-          "Link a product to one or more categories. Send List of categories via body",
-        tags: ["Products"],
-      },
-    },
-  )
-  .delete(
-    "/:id/categories/:categoryId",
-    async () =>
-      successResponse({ result: await productsService.detachCategory() }),
-    {
-      auth: true, // change later
-      params: ProductsModel.categoryParams,
-      response: stubResponse,
-      detail: {
-        summary: "Detach a product from a category",
-        description:
-          "Remove a category from a product, so categories can be edited after the fact, not just attached once.",
         tags: ["Products"],
       },
     },
