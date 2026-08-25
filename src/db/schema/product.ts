@@ -17,6 +17,7 @@ export const product = pgTable("product", {
   minStockHq: integer("min_stock_hq").notNull().default(0),
   minStockBranch: integer("min_stock_branch").notNull().default(0),
   isActive: boolean("is_active").notNull().default(true),
+  costPrice: integer("cost_price").notNull().default(0),
   ...timestamps(),
 });
 

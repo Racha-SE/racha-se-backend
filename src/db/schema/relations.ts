@@ -8,7 +8,6 @@ import {
   order,
 } from "./order";
 import { product, productCategory, productCategoryMap } from "./product";
-import { stockAdjustment } from "./stock_adjustment";
 import { supplier } from "./supplier";
 import { user } from "./user";
 
@@ -18,7 +17,6 @@ export const userRelations = relations(user, ({ one, many }) => ({
     references: [branch.branchId],
   }),
   orders: many(order),
-  stockAdjustments: many(stockAdjustment),
   sessions: many(session),
   accounts: many(account),
 }));
@@ -41,7 +39,6 @@ export const branchRelations = relations(branch, ({ many }) => ({
   users: many(user),
   branchOrderDetails: many(branchOrderDetail),
   customerOrderDetails: many(customerOrderDetail),
-  stockAdjustments: many(stockAdjustment),
 }));
 
 export const supplierRelations = relations(supplier, ({ many }) => ({
@@ -53,7 +50,6 @@ export const productRelations = relations(product, ({ many }) => ({
   headOrderDetails: many(headOrderDetail),
   branchOrderDetails: many(branchOrderDetail),
   customerOrderDetails: many(customerOrderDetail),
-  stockAdjustments: many(stockAdjustment),
 }));
 
 export const productCategoryRelations = relations(
@@ -141,24 +137,6 @@ export const branchOrderDetailRelations = relations(
     product: one(product, {
       fields: [branchOrderDetail.pId],
       references: [product.pId],
-    }),
-  }),
-);
-
-export const stockAdjustmentRelations = relations(
-  stockAdjustment,
-  ({ one }) => ({
-    branch: one(branch, {
-      fields: [stockAdjustment.branchId],
-      references: [branch.branchId],
-    }),
-    product: one(product, {
-      fields: [stockAdjustment.pId],
-      references: [product.pId],
-    }),
-    user: one(user, {
-      fields: [stockAdjustment.userId],
-      references: [user.id],
     }),
   }),
 );
