@@ -10,6 +10,7 @@ import {
   inventoryRoute,
   mockAuthRoute,
   mockRoute,
+  notificationsRoute,
   ordersBranchRoute,
   ordersHqRoute,
   productsRoute,
@@ -60,8 +61,12 @@ const app = new Elysia()
           },
           {
             name: "Inventory",
+            description: "Live, searchable stock-on-hand queries",
+          },
+          {
+            name: "Notifications",
             description:
-              "Live stock-on-hand, low-stock, and near-expiry queries",
+              "Persisted expire and min_stock alerts (HQ and branch scoped)",
           },
           { name: "Branches", description: "Branch master data management" },
           {
@@ -87,6 +92,7 @@ const app = new Elysia()
       .use(ordersHqRoute)
       .use(ordersBranchRoute)
       .use(inventoryRoute)
+      .use(notificationsRoute)
       .use(branchesRoute);
 
     // mock routes exist only to demonstrate the architecture — never expose them outside dev

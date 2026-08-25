@@ -5,6 +5,7 @@ export * from "./health.route";
 export * from "./inventory.route";
 export * from "./mock-auth.route";
 export * from "./mock.route";
+export * from "./notifications.route";
 export * from "./orders-branch.route";
 export * from "./orders-hq.route";
 export * from "./products.route";
