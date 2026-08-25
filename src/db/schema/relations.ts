@@ -7,6 +7,7 @@ import {
   headOrderDetail,
   order,
 } from "./order";
+import { notification } from "./notification";
 import { product, productCategory, productCategoryMap } from "./product";
 import { supplier } from "./supplier";
 import { user } from "./user";
@@ -39,6 +40,7 @@ export const branchRelations = relations(branch, ({ many }) => ({
   users: many(user),
   branchOrderDetails: many(branchOrderDetail),
   customerOrderDetails: many(customerOrderDetail),
+  notifications: many(notification),
 }));
 
 export const supplierRelations = relations(supplier, ({ many }) => ({
@@ -50,6 +52,7 @@ export const productRelations = relations(product, ({ many }) => ({
   headOrderDetails: many(headOrderDetail),
   branchOrderDetails: many(branchOrderDetail),
   customerOrderDetails: many(customerOrderDetail),
+  notifications: many(notification),
 }));
 
 export const productCategoryRelations = relations(
@@ -85,6 +88,7 @@ export const orderRelations = relations(order, ({ one, many }) => ({
   headOrderDetails: many(headOrderDetail),
   branchOrderDetails: many(branchOrderDetail),
   customerOrderDetails: many(customerOrderDetail),
+  notifications: many(notification),
 }));
 
 export const headOrderDetailRelations = relations(
@@ -140,3 +144,18 @@ export const branchOrderDetailRelations = relations(
     }),
   }),
 );
+
+export const notificationRelations = relations(notification, ({ one }) => ({
+  branch: one(branch, {
+    fields: [notification.branchId],
+    references: [branch.branchId],
+  }),
+  product: one(product, {
+    fields: [notification.pId],
+    references: [product.pId],
+  }),
+  order: one(order, {
+    fields: [notification.lotId],
+    references: [order.lotId],
+  }),
+}));
