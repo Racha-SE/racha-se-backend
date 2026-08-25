@@ -34,6 +34,8 @@ export const order = pgTable("order", {
   status: orderStatusEnum("status").notNull().default("pending"),
   approvedBy: text("approved_by").references(() => user.id),
   approvedAt: timestamp("approved_at"),
+  receivedAt: timestamp("received_at"),
+  rejectReason: text("reject_reason"),
   updatedAt: updatedAtColumn(),
 });
 
@@ -54,7 +56,6 @@ export const headOrderDetail = pgTable(
       .notNull()
       .references(() => product.pId),
     basePrice: integer("base_price").notNull().default(0),
-    costPrice: integer("cost_price").notNull().default(0),
     ...timestamps(),
   },
   (table) => ({
@@ -86,7 +87,6 @@ export const customerOrderDetail = pgTable(
       .notNull()
       .references(() => product.pId),
     basePrice: integer("unit_price").notNull().default(0),
-    costPrice: integer("unit_cost").notNull().default(0),
     ...timestamps(),
   },
   (table) => ({
