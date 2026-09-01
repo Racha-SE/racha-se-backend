@@ -1,3 +1,5 @@
+import type { OrdersBranchCreateBody } from "@/models/orders-branch.model";
+
 export const ordersBranchService = {
   list(): Promise<null> {
     return Promise.resolve(null);
@@ -7,7 +9,12 @@ export const ordersBranchService = {
     return Promise.resolve(null);
   },
 
-  create(): Promise<null> {
+  create(
+    userId: string,
+    branchId: number,
+    items: OrdersBranchCreateBody,
+  ): Promise<null> {
+    console.log({ userId, branchId, items });
     return Promise.resolve(null);
   },
 
