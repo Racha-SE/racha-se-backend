@@ -2,7 +2,12 @@ import { Elysia, t } from "elysia";
 import { authPlugin } from "@/plugins/auth.plugin";
 import { OrdersBranchModel } from "@/models/orders-branch.model";
 import { ordersBranchService } from "@/services/orders-branch.service";
-import { successResponse, tErrorResponse, tSuccessResponse } from "@/utils";
+import {
+  AppError,
+  successResponse,
+  tErrorResponse,
+  tSuccessResponse,
+} from "@/utils";
 
 const stubResponse = {
   200: tSuccessResponse(t.Object({ result: t.Null() })),
@@ -43,11 +48,28 @@ export const ordersBranchRoute = new Elysia({ prefix: "/orders/branch" })
   )
   .post(
     "/",
-    async () => successResponse({ result: await ordersBranchService.create() }),
+    async ({ user, body }) => {
+      const { id, branchId } = user;
+
+      if (!branchId) {
+        throw new AppError("BAD_REQUEST", {
+          message: "Branch ID is required for creating an order.",
+        });
+      }
+
+      return successResponse({
+        result: await ordersBranchService.create(id, branchId, body),
+      });
+    },
     {
-      auth: true, // change later
+      auth: ["branch"],
       body: OrdersBranchModel.createBody,
-      response: stubResponse,
+      response: {
+        200: tSuccessResponse(t.Object({ result: t.Null() })),
+        400: tErrorResponse("BAD_REQUEST"),
+        409: tErrorResponse("INSUFFICIENT_STOCK"),
+        500: tErrorResponse("INTERNAL_SERVER_ERROR"),
+      },
       detail: {
         summary: "Request a stock transfer from HQ",
         description:

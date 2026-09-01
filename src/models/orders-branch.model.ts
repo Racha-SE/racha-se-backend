@@ -15,15 +15,21 @@ const lineItemView = t.Composite([
   t.Object({ availableAmount: t.Number() }),
 ]);
 
+const BranchOrderView = t.Composite([
+  orderEntity,
+  t.Object({ items: t.Array(lineItemView) }),
+]);
+
 export const OrdersBranchModel = {
   params: t.Object({ lotId: t.Numeric() }),
   createBody: t.Object({
     items: t.Array(requestLineItem, { minItems: 1 }),
   }),
-  detail: t.Composite([
-    orderEntity,
-    t.Object({ items: t.Array(lineItemView) }),
-  ]),
+  detail: BranchOrderView,
+  createBodyResponse: BranchOrderView,
 };
 
 export type OrdersBranchDetail = Static<typeof OrdersBranchModel.detail>;
+export type OrdersBranchCreateBody = Static<
+  typeof OrdersBranchModel.createBody
+>;
