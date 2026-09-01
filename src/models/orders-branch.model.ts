@@ -26,13 +26,18 @@ export const OrdersBranchModel = {
     items: t.Array(requestLineItem, { minItems: 1 }),
   }),
   detail: BranchOrderView,
-  createBodyResponse: t.Composite([
+  createResponse: t.Composite([
     orderEntity,
-    t.Object({ items: t.Omit(branchOrderDetailEntity, ["lotId"]) }),
+    t.Object({
+      items: t.Array(t.Omit(branchOrderDetailEntity, ["lotId"])),
+    }),
   ]),
 };
 
 export type OrdersBranchDetail = Static<typeof OrdersBranchModel.detail>;
 export type OrdersBranchCreateBody = Static<
   typeof OrdersBranchModel.createBody
+>;
+export type OrdersBranchCreateResponse = Static<
+  typeof OrdersBranchModel.createResponse
 >;
