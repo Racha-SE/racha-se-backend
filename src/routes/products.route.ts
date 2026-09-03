@@ -2,9 +2,12 @@ import { Elysia, t } from "elysia";
 import { authPlugin } from "@/plugins/auth.plugin";
 import { ProductsModel } from "@/models/products.model";
 import { productsService } from "@/services/products.service";
-import { successResponse, tSuccessResponse } from "@/utils";
+import { successResponse, tErrorResponse, tSuccessResponse } from "@/utils";
 
-const stubResponse = { 200: tSuccessResponse(t.Object({ result: t.Null() })) };
+const stubResponse = {
+  200: tSuccessResponse(t.Object({ result: t.Null() })),
+  500: tErrorResponse("INTERNAL_SERVER_ERROR"),
+};
 
 export const productsRoute = new Elysia({ prefix: "/products" })
   .use(authPlugin)
