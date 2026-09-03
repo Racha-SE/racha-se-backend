@@ -23,12 +23,14 @@
     "better-auth": "^1.6.26",
     "drizzle-orm": "^0.45.2",
     "drizzle-typebox": "^0.3.3",
-    "elysia": "latest"
+    "elysia": "latest",
+    "nodemailer": "^9.1.1"
   },
   "devDependencies": {
     "@commitlint/cli": "^21.2.1",
     "@commitlint/config-conventional": "^21.2.0",
     "@eslint/js": "^10.0.1",
+    "@types/nodemailer": "^8.0.1",
     "bun-types": "latest",
     "drizzle-kit": "^0.31.10",
     "eslint": "^10.8.1",

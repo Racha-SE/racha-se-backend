@@ -9,11 +9,19 @@ services:
       BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET}
       BETTER_AUTH_URL: ${BETTER_AUTH_URL}
       CORS_ORIGIN: ${CORS_ORIGIN}
+      SMTP_HOST: mailpit
+      SMTP_PORT: 1025
+      SMTP_SECURE: "false"
+      SMTP_USER: ${SMTP_USER}
+      SMTP_PASS: ${SMTP_PASS}
+      SMTP_FROM: ${SMTP_FROM}
     volumes:
       - ./src:/app/src
     depends_on:
       db:
         condition: service_healthy
+      mailpit:
+        condition: service_started
     networks:
       - racha-se-network
 
@@ -42,6 +50,14 @@ services:
     depends_on:
       db:
         condition: service_healthy
+    networks:
+      - racha-se-network
+
+  mailpit:
+    image: axllent/mailpit
+    ports:
+      - "6825:1025" # SMTP — point SMTP_HOST/SMTP_PORT here when running `bun run dev` on the host
+      - "6826:8025" # web UI — view caught emails at http://localhost:6826
     networks:
       - racha-se-network
 
