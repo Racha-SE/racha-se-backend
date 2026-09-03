@@ -2,9 +2,12 @@ import { Elysia, t } from "elysia";
 import { authPlugin } from "@/plugins/auth.plugin";
 import { BranchesModel } from "@/models/branches.model";
 import { branchesService } from "@/services/branches.service";
-import { successResponse, tSuccessResponse } from "@/utils";
+import { successResponse, tErrorResponse, tSuccessResponse } from "@/utils";
 
-const stubResponse = { 200: tSuccessResponse(t.Object({ result: t.Null() })) };
+const stubResponse = {
+  200: tSuccessResponse(t.Object({ result: t.Null() })),
+  500: tErrorResponse("INTERNAL_SERVER_ERROR"),
+};
 
 export const branchesRoute = new Elysia({ prefix: "/branches" })
   .use(authPlugin)

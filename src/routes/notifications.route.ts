@@ -2,9 +2,12 @@ import { Elysia, t } from "elysia";
 import { authPlugin } from "@/plugins/auth.plugin";
 import { NotificationModel } from "@/models/notification.model";
 import { notificationService } from "@/services/notification.service";
-import { successResponse, tSuccessResponse } from "@/utils";
+import { successResponse, tErrorResponse, tSuccessResponse } from "@/utils";
 
-const stubResponse = { 200: tSuccessResponse(t.Object({ result: t.Null() })) };
+const stubResponse = {
+  200: tSuccessResponse(t.Object({ result: t.Null() })),
+  500: tErrorResponse("INTERNAL_SERVER_ERROR"),
+};
 
 export const notificationsRoute = new Elysia({ prefix: "/notifications" })
   .use(authPlugin)

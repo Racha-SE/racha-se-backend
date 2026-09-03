@@ -24,5 +24,11 @@ export const errorHandler = new Elysia()
       set.status = error.httpStatus;
       return errorResponse(error.code, error.context);
     }
+
+    if (code === "UNKNOWN" || code === "INTERNAL_SERVER_ERROR") {
+      console.error(error);
+      set.status = AppErrorCode.INTERNAL_SERVER_ERROR;
+      return errorResponse("INTERNAL_SERVER_ERROR");
+    }
   })
   .as("global");

@@ -37,6 +37,7 @@ export const usersRoute = new Elysia({ prefix: "/users" })
       query: UsersModel.listQuery,
       response: {
         200: tSuccessResponse(UsersModel.listResult),
+        500: tErrorResponse("INTERNAL_SERVER_ERROR"),
       },
       detail: {
         summary: "List users within the caller's authorized scope",
@@ -57,6 +58,7 @@ export const usersRoute = new Elysia({ prefix: "/users" })
         200: tSuccessResponse(UsersModel.entity),
         403: tErrorResponse("FORBIDDEN"),
         404: tErrorResponse("NOT_FOUND"),
+        500: tErrorResponse("INTERNAL_SERVER_ERROR"),
       },
       detail: {
         summary: "Get a single user",
@@ -81,6 +83,7 @@ export const usersRoute = new Elysia({ prefix: "/users" })
         403: tErrorResponse("FORBIDDEN"),
         404: tErrorResponse("NOT_FOUND"),
         409: tErrorResponse("ALREADY_EXISTS"),
+        500: tErrorResponse("INTERNAL_SERVER_ERROR"),
       },
       detail: {
         summary: "Update a user",
@@ -102,6 +105,7 @@ export const usersRoute = new Elysia({ prefix: "/users" })
         400: tErrorResponse("BAD_REQUEST"),
         403: tErrorResponse("FORBIDDEN"),
         409: tErrorResponse("ALREADY_EXISTS"),
+        500: tErrorResponse("INTERNAL_SERVER_ERROR"),
       },
       detail: {
         summary: "Create a new user account (hierarchy-checked)",
@@ -123,6 +127,7 @@ export const usersRoute = new Elysia({ prefix: "/users" })
         400: tErrorResponse("BAD_REQUEST"),
         403: tErrorResponse("FORBIDDEN"),
         404: tErrorResponse("NOT_FOUND"),
+        500: tErrorResponse("INTERNAL_SERVER_ERROR"),
       },
       detail: {
         summary: "Deactivate a user account",
@@ -143,6 +148,7 @@ export const usersRoute = new Elysia({ prefix: "/users" })
         200: tSuccessResponse(UsersModel.entity),
         403: tErrorResponse("FORBIDDEN"),
         404: tErrorResponse("NOT_FOUND"),
+        500: tErrorResponse("INTERNAL_SERVER_ERROR"),
       },
       detail: {
         summary: "Reactivate a deactivated user account",
