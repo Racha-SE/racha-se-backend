@@ -1,19 +1,43 @@
-import { Elysia, t } from "elysia";
+import { Elysia } from "elysia";
 import { authPlugin } from "@/plugins/auth.plugin";
 import { UsersModel } from "@/models/users.model";
 import { usersService } from "@/services/users.service";
-import { successResponse, tSuccessResponse } from "@/utils";
+import {
+  type ScopedActor,
+  type UserType,
+  successResponse,
+  tErrorResponse,
+  tSuccessResponse,
+} from "@/utils";
 
-const stubResponse = { 200: tSuccessResponse(t.Object({ result: t.Null() })) };
+// Only hq and branch accounts manage other accounts — cashier/customer never
+// reach any handler below (authPlugin's macro 403s them first).
+const MANAGER_USER_TYPES: UserType[] = ["hq", "branch"];
+
+function toActor(user: {
+  id: string;
+  userType: UserType;
+  branchId?: number | null;
+}): ScopedActor {
+  return {
+    id: user.id,
+    userType: user.userType,
+    branchId: user.branchId ?? null,
+  };
+}
 
 export const usersRoute = new Elysia({ prefix: "/users" })
   .use(authPlugin)
   .get(
     "/",
-    async () => successResponse({ result: await usersService.list() }),
+    async ({ user, query }) =>
+      successResponse(await usersService.list(toActor(user), query)),
     {
-      auth: true, // change later
-      response: stubResponse,
+      auth: MANAGER_USER_TYPES,
+      query: UsersModel.listQuery,
+      response: {
+        200: tSuccessResponse(UsersModel.listResult),
+      },
       detail: {
         summary: "List users within the caller's authorized scope",
         description:
@@ -24,11 +48,16 @@ export const usersRoute = new Elysia({ prefix: "/users" })
   )
   .get(
     "/:id",
-    async () => successResponse({ result: await usersService.getById() }),
+    async ({ user, params }) =>
+      successResponse(await usersService.getById(toActor(user), params.id)),
     {
-      auth: true, // change later
+      auth: MANAGER_USER_TYPES,
       params: UsersModel.params,
-      response: stubResponse,
+      response: {
+        200: tSuccessResponse(UsersModel.entity),
+        403: tErrorResponse("FORBIDDEN"),
+        404: tErrorResponse("NOT_FOUND"),
+      },
       detail: {
         summary: "Get a single user",
         description:
@@ -37,32 +66,88 @@ export const usersRoute = new Elysia({ prefix: "/users" })
       },
     },
   )
-  .post(
-    "/",
-    async () => successResponse({ result: await usersService.create() }),
+  .patch(
+    "/:id",
+    async ({ user, params, body }) =>
+      successResponse(
+        await usersService.update(toActor(user), params.id, body),
+      ),
     {
-      auth: true, // change later
-      body: UsersModel.createBody,
-      response: stubResponse,
+      auth: MANAGER_USER_TYPES,
+      params: UsersModel.params,
+      body: UsersModel.updateBody,
+      response: {
+        200: tSuccessResponse(UsersModel.entity),
+        403: tErrorResponse("FORBIDDEN"),
+        404: tErrorResponse("NOT_FOUND"),
+        409: tErrorResponse("ALREADY_EXISTS"),
+      },
       detail: {
-        summary: "Create a new user account (hierarchy-checked)",
+        summary: "Update a user",
         description:
-          "Custom route replacing disabled public sign-up; checks the caller's userType hierarchy before creating the account via better-auth.",
+          "Edit an existing user's profile fields, within the caller's authorized scope.",
         tags: ["Users"],
       },
     },
   )
-  .delete(
-    "/:id",
-    async () => successResponse({ result: await usersService.deactivate() }),
+  .post(
+    "/",
+    async ({ user, body }) =>
+      successResponse(await usersService.create(toActor(user), body)),
     {
-      auth: true, // change later
+      auth: MANAGER_USER_TYPES,
+      body: UsersModel.createBody,
+      response: {
+        200: tSuccessResponse(UsersModel.entity),
+        400: tErrorResponse("BAD_REQUEST"),
+        403: tErrorResponse("FORBIDDEN"),
+        409: tErrorResponse("ALREADY_EXISTS"),
+      },
+      detail: {
+        summary: "Create a new user account (hierarchy-checked)",
+        description:
+          "Custom route replacing disabled public sign-up; checks the caller's userType hierarchy before creating the account via better-auth. HQ may create hq/branch/cashier/customer accounts; a Branch account may only create cashiers within its own branch.",
+        tags: ["Users"],
+      },
+    },
+  )
+  .patch(
+    "/:id/deactivate",
+    async ({ user, params }) =>
+      successResponse(await usersService.deactivate(toActor(user), params.id)),
+    {
+      auth: MANAGER_USER_TYPES,
       params: UsersModel.params,
-      response: stubResponse,
+      response: {
+        200: tSuccessResponse(UsersModel.entity),
+        400: tErrorResponse("BAD_REQUEST"),
+        403: tErrorResponse("FORBIDDEN"),
+        404: tErrorResponse("NOT_FOUND"),
+      },
       detail: {
         summary: "Deactivate a user account",
         description:
-          "Checks hierarchy, then calls better-auth's admin.banUser() - better-auth blocks sign-in and kills existing sessions natively, no custom isActive field needed.",
+          "Checks hierarchy, then bans the account (blocks sign-in, kills existing sessions) — no custom isActive field needed.",
+        tags: ["Users"],
+      },
+    },
+  )
+  .patch(
+    "/:id/reactivate",
+    async ({ user, params }) =>
+      successResponse(await usersService.reactivate(toActor(user), params.id)),
+    {
+      auth: MANAGER_USER_TYPES,
+      params: UsersModel.params,
+      response: {
+        200: tSuccessResponse(UsersModel.entity),
+        403: tErrorResponse("FORBIDDEN"),
+        404: tErrorResponse("NOT_FOUND"),
+      },
+      detail: {
+        summary: "Reactivate a deactivated user account",
+        description:
+          "Checks hierarchy, then clears banned/banReason/banExpires, restoring the account's ability to sign in.",
         tags: ["Users"],
       },
     },
