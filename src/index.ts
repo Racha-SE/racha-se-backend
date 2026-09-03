@@ -17,9 +17,10 @@ import {
   suppliersRoute,
   usersRoute,
 } from "@/routes";
-import { getAuthOpenAPIDocumentation } from "@/utils";
+import { getAuthOpenAPIDocumentation, verifyMailerConnection } from "@/utils";
 
 const authDocs = await getAuthOpenAPIDocumentation();
+await verifyMailerConnection();
 
 const app = new Elysia()
   .use(
