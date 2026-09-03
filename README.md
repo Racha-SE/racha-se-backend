@@ -22,13 +22,22 @@ pre-commit install
 pre-commit install --hook-type commit-msg
 pre-commit install --hook-type pre-push
 
-# 4. start Postgres + Adminer
-docker compose up -d db adminer
+# 4. start Postgres + Adminer + Mailpit (SMTP catcher, see "Docker" below)
+docker compose up -d db adminer mailpit
 
 # 5. run database migrations
 bun run db:migrate
 
-# 6. run the dev server
+# 6. bootstrap the first admin account (see "Authentication" below) —
+#    run once per environment, pass real values instead of these placeholders
+ADMIN_EMAIL=admin@example.com \
+ADMIN_PASSWORD=change-me-immediately \
+ADMIN_FIRSTNAME=Admin \
+ADMIN_LASTNAME=User \
+ADMIN_USERNAME=admin \
+bun run create-admin
+
+# 7. run the dev server
 bun run dev
 ```
 
@@ -54,14 +63,20 @@ The API is now at `http://localhost:3000/api/v1`.
 
 All routes are mounted under `/api/v1`, including better-auth's own routes (`/api/v1/auth/*`) — better-auth's `.mount()` still has to sit outside the `{ prefix: "/api/v1" }` group (see "Authentication" below and CONTRIBUTING.md), but its own `basePath` is configured to `/api/v1/auth` so the URL still ends up versioned the same as everything else.
 
-| Route                           | Notes                                                                           |
-| ------------------------------- | ------------------------------------------------------------------------------- |
-| `GET /api/v1/health`            | Always on — liveness check                                                      |
-| `GET /api/v1/mock/users`        | **Dev-only** (`NODE_ENV=development`) — real DB-backed reference implementation |
-| `GET /api/v1/mock/users/:id`    | Dev-only                                                                        |
-| `POST /api/v1/mock/users`       | Dev-only                                                                        |
-| `GET /api/v1/mock/auth/me`      | Dev-only — demonstrates the `auth` macro, any signed-in user                    |
-| `GET /api/v1/mock/auth/hq-only` | Dev-only — demonstrates userType-gated `auth` macro (`hq` only)                 |
+| Route                                | Notes                                                                                                        |
+| ------------------------------------ | ------------------------------------------------------------------------------------------------------------ |
+| `GET /api/v1/health`                 | Always on — liveness check                                                                                   |
+| `GET /api/v1/users`                  | HQ sees all users (filterable by `branchId`/`userType`/`search`, paginated); Branch sees only its own branch |
+| `GET /api/v1/users/:id`              | Get one user, within the caller's authorized scope                                                           |
+| `POST /api/v1/users`                 | Create a user — hierarchy-checked (see "Authentication" below)                                               |
+| `PATCH /api/v1/users/:id`            | Update a user's profile fields                                                                               |
+| `PATCH /api/v1/users/:id/deactivate` | Ban the account (blocks sign-in, kills existing sessions)                                                    |
+| `PATCH /api/v1/users/:id/reactivate` | Un-ban the account                                                                                           |
+| `GET /api/v1/mock/users`             | **Dev-only** (`NODE_ENV=development`) — real DB-backed reference implementation                              |
+| `GET /api/v1/mock/users/:id`         | Dev-only                                                                                                     |
+| `POST /api/v1/mock/users`            | Dev-only                                                                                                     |
+| `GET /api/v1/mock/auth/me`           | Dev-only — demonstrates the `auth` macro, any signed-in user                                                 |
+| `GET /api/v1/mock/auth/hq-only`      | Dev-only — demonstrates userType-gated `auth` macro (`hq` only)                                              |
 
 The `mock` routes exist to show the intended architecture end-to-end (model → service → route, backed by a real `mock_users` table via Drizzle) — but they're not part of the real product schema. See [CONTRIBUTING.md](./CONTRIBUTING.md) before adding real routes.
 
@@ -72,38 +87,34 @@ The `mock` routes exist to show the intended architecture end-to-end (model → 
 This is a warehouse system — accounts are provisioned by an admin, not self-service:
 
 - Public sign-up (`POST /api/v1/auth/sign-up/email`) is disabled (`emailAndPassword.disableSignUp`).
-- Accounts are created via `POST /api/v1/auth/admin/create-user` (from the [admin plugin](https://better-auth.com/docs/plugins/admin)), which requires an existing session with `role: "admin"`.
-- `role` (`admin`/`user`) only gates the admin API — it's separate from `userType` (`hq`/`branch`/`cashier`/`customer`), the business role used everywhere else (see `src/plugins/auth.plugin.ts`'s `auth` macro, gated on `userType`).
+- Beyond the bootstrap admin, accounts are created via `POST /api/v1/users` (`src/routes/users.route.ts`), not better-auth's own `POST /api/v1/auth/admin/create-user` — the custom route enforces the `userType` hierarchy (hq can create hq/branch/cashier/customer; a branch account can only create cashiers in its own branch) before calling `auth.api.createUser()` server-side. See its OpenAPI docs for the rest of the `/users` surface (list/get/update/deactivate/reactivate).
+- `role` (`admin`/`user`) is a separate, mostly-unused concept from `userType` (`hq`/`branch`/`cashier`/`customer`), the business role used everywhere else (see `src/plugins/auth.plugin.ts`'s `auth` macro, gated on `userType`) — every account created via `POST /api/v1/users` keeps the better-auth default `role: "user"` on purpose, so only the bootstrap admin can reach better-auth's own `/admin/*` endpoints directly.
 
-**Bootstrapping the first admin** — since account creation itself requires an admin, the very first one has to be created outside the HTTP layer:
-
-```bash
-ADMIN_EMAIL=admin@example.com \
-ADMIN_PASSWORD=change-me-immediately \
-ADMIN_FIRSTNAME=Admin \
-ADMIN_LASTNAME=User \
-ADMIN_USERNAME=admin \
-bun run create-admin
-```
-
-Run once per environment (it checks for an existing `role: "admin"` user and refuses if one already exists). After that, sign in as this admin and use `POST /api/v1/auth/admin/create-user` for every other account.
+**Bootstrapping the first admin** — since account creation itself requires an admin, the very first one has to be created outside the HTTP layer, via `bun run create-admin` (step 6 of Setup above). Run once per environment (it checks for an existing `role: "admin"` user and refuses if one already exists). After that, sign in as this admin and use `POST /api/v1/users` (hierarchy-checked, see the route's OpenAPI docs) for every other account.
 
 **CORS** — `CORS_ORIGIN` (env var, currently a placeholder — no frontend yet) controls both `@elysiajs/cors` and better-auth's `trustedOrigins`; they're separate mechanisms that happen to share the same value. `credentials: true` is set, so it must be an exact origin, not `*`.
 
+**Forgot/reset password** — `POST /api/v1/auth/request-password-reset` (`{email, redirectTo?}`) emails a reset link, `POST /api/v1/auth/reset-password` (`{token, newPassword}`) applies it. The email itself is sent via `src/utils/mailer.ts` (nodemailer, config from the `SMTP_*` env vars) — locally that's Mailpit (see Docker below), so nothing is ever sent to a real inbox in dev. Resetting a password also revokes every other session (`revokeSessionsOnPasswordReset: true` in `src/utils/auth.ts`), same reasoning as `usersService.deactivate`'s session wipe.
+
+`GET /api/v1/auth/reset-password/:token` (the link in the email) is a redirect-only endpoint, not a page — it validates the token then 302s to `redirectTo` with `?token=...` appended, for a frontend to pick up and call `POST /reset-password` itself. Without a `redirectTo` (or without a frontend to receive it), it just redirects to `/auth/error`. `redirectTo` must be a trusted origin (checked the same way as `CORS_ORIGIN`) or the request is rejected before an email is even sent.
+
+`src/index.ts` calls `verifyMailerConnection()` on startup — it checks the SMTP connection and logs a clear success/failure line (`Mailer connected (SMTP host:port)` or `Mailer failed to connect ...`), but never blocks boot: the rest of the API doesn't depend on email working. A broken SMTP config otherwise fails **silently** per-request — better-auth swallows `sendResetPassword` errors into a generic background-task log line, so `src/utils/auth.ts` catches and logs each failure itself with the actual recipient email attached.
+
 ## Docker
 
-`docker-compose.yml` runs three services, all on a fixed bridge network (`racha-se-network`) so a future frontend repo can join it directly (`networks: { racha-se-network: { external: true } }`):
+`docker-compose.yml` runs four services, all on a fixed bridge network (`racha-se-network`) so a future frontend repo can join it directly (`networks: { racha-se-network: { external: true } }`):
 
-| Service   | Host port | Purpose                                                 |
-| --------- | --------- | ------------------------------------------------------- |
-| `backend` | `6767`    | this app, built from `Dockerfile`                       |
-| `db`      | `6969`    | Postgres 17                                             |
-| `adminer` | `6769`    | Postgres web UI (`http://localhost:6769`, server: `db`) |
+| Service   | Host port     | Purpose                                                                                  |
+| --------- | ------------- | ---------------------------------------------------------------------------------------- |
+| `backend` | `6767`        | this app, built from `Dockerfile`                                                        |
+| `db`      | `6969`        | Postgres 17                                                                              |
+| `adminer` | `6769`        | Postgres web UI (`http://localhost:6769`, server: `db`)                                  |
+| `mailpit` | `6825`/`6826` | SMTP catcher for local dev — send on `6825`, view caught mail at `http://localhost:6826` |
 
 Ports are non-default on purpose to avoid clashing with other local projects.
 
 ```bash
-docker compose up -d db adminer                          # just the DB (common if you're running `bun run dev` on the host instead)
+docker compose up -d db adminer mailpit                   # just the dependencies (common if you're running `bun run dev` on the host instead)
 docker compose run --rm backend bun run db:migrate        # apply migrations before the backend container serves traffic
 docker compose up -d                                      # start everything, including the backend container
 docker compose stop                                       # stop without deleting containers/volumes
@@ -146,6 +157,6 @@ CI (`.github/workflows/ci.yml`) runs the exact same `pre-commit run --all-files`
 
 ## Not yet wired up
 
-- No real (non-mock) routes exist against the business schema (`user`, `branch`, `product`, `order`, ...) yet — only migrations for it, plus auth. The `/mock/users` and `/mock/auth` routes are working references to copy the pattern from, not real endpoints.
+- `POST/GET/PATCH /api/v1/users*` is the only real (non-mock) route implemented so far. The rest of the business schema (`branch`, `product`, `order`, ...) only has migrations plus route/service/model scaffolding — no logic yet. The `/mock/users` and `/mock/auth` routes remain working references to copy the pattern from.
 
 `docs/skills/` has a reference guide for Better Auth, pulled from its official skill docs.
