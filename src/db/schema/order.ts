@@ -7,6 +7,7 @@ import {
   serial,
   text,
   timestamp,
+  uniqueIndex,
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 import { branch } from "./branch";
@@ -61,6 +62,9 @@ export const headOrderDetail = pgTable(
   },
   (table) => ({
     pk: primaryKey({ columns: [table.lotId, table.hodId] }),
+    // hodId is already unique on its own (serial), but the primary key is
+    // composite - branch_order_allocation needs this to reference hod_id alone.
+    hodIdUnique: uniqueIndex("head_order_detail_hod_id_unique").on(table.hodId),
     amountNonNegative: check(
       "head_order_detail_amount_nonnegative",
       sql`${table.amount} >= 0`,
@@ -126,6 +130,11 @@ export const branchOrderDetail = pgTable(
   },
   (table) => ({
     pk: primaryKey({ columns: [table.lotId, table.bodId] }),
+    // Same as head_order_detail: needed so branch_order_allocation can
+    // reference bod_id alone.
+    bodIdUnique: uniqueIndex("branch_order_detail_bod_id_unique").on(
+      table.bodId,
+    ),
     amountNonNegative: check(
       "branch_order_detail_amount_nonnegative",
       sql`${table.amount} >= 0`,
@@ -137,6 +146,35 @@ export const branchOrderDetail = pgTable(
     availableNonNegative: check(
       "branch_order_detail_available_nonnegative",
       sql`${table.available} >= 0`,
+    ),
+  }),
+);
+
+/**
+ * Which HQ lot(s) a branch order line was filled from, and how much came from
+ * each. A branch line item stays one row in branch_order_detail even when it
+ * spans several head_order_detail lots (different base prices and expiry
+ * dates), so this is where the per-lot breakdown lives - it's what lets
+ * reject/receive put the reserved stock back on exactly the lots it was taken
+ * from. Written once when the lots are picked; never updated afterwards.
+ */
+export const branchOrderAllocation = pgTable(
+  "branch_order_allocation",
+  {
+    bodId: integer("bod_id")
+      .notNull()
+      .references(() => branchOrderDetail.bodId),
+    hodId: integer("hod_id")
+      .notNull()
+      .references(() => headOrderDetail.hodId),
+    amount: integer("amount").notNull(),
+    ...timestamps(),
+  },
+  (table) => ({
+    pk: primaryKey({ columns: [table.bodId, table.hodId] }),
+    amountPositive: check(
+      "branch_order_allocation_amount_positive",
+      sql`${table.amount} > 0`,
     ),
   }),
 );
