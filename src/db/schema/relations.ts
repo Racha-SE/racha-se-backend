@@ -2,6 +2,7 @@ import { relations } from "drizzle-orm";
 import { account, session } from "./auth";
 import { branch } from "./branch";
 import {
+  branchOrderAllocation,
   branchOrderDetail,
   customerOrderDetail,
   headOrderDetail,
@@ -93,7 +94,8 @@ export const orderRelations = relations(order, ({ one, many }) => ({
 
 export const headOrderDetailRelations = relations(
   headOrderDetail,
-  ({ one }) => ({
+  ({ one, many }) => ({
+    branchOrderAllocations: many(branchOrderAllocation),
     order: one(order, {
       fields: [headOrderDetail.lotId],
       references: [order.lotId],
@@ -129,7 +131,8 @@ export const customerOrderDetailRelations = relations(
 
 export const branchOrderDetailRelations = relations(
   branchOrderDetail,
-  ({ one }) => ({
+  ({ one, many }) => ({
+    allocations: many(branchOrderAllocation),
     order: one(order, {
       fields: [branchOrderDetail.lotId],
       references: [order.lotId],
@@ -141,6 +144,20 @@ export const branchOrderDetailRelations = relations(
     product: one(product, {
       fields: [branchOrderDetail.pId],
       references: [product.pId],
+    }),
+  }),
+);
+
+export const branchOrderAllocationRelations = relations(
+  branchOrderAllocation,
+  ({ one }) => ({
+    branchOrderDetail: one(branchOrderDetail, {
+      fields: [branchOrderAllocation.bodId],
+      references: [branchOrderDetail.bodId],
+    }),
+    headOrderDetail: one(headOrderDetail, {
+      fields: [branchOrderAllocation.hodId],
+      references: [headOrderDetail.hodId],
     }),
   }),
 );
