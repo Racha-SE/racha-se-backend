@@ -67,6 +67,7 @@ export const ordersBranchRoute = new Elysia({ prefix: "/orders/branch" })
       response: {
         200: tSuccessResponse(t.Object({ result: t.Null() })),
         400: tErrorResponse("BAD_REQUEST"),
+        404: tErrorResponse("NOT_FOUND"),
         409: tErrorResponse("INSUFFICIENT_STOCK"),
         500: tErrorResponse("INTERNAL_SERVER_ERROR"),
       },
