@@ -128,12 +128,10 @@ describe("POST /orders/branch", () => {
 
   test("returns 409 with an AppError envelope when HQ stock is short", async () => {
     const pId = await fixture.createProduct();
-    // 10 physically left but only 2 unreserved — a branch order can only draw
-    // against what's available, so 3 is already short
+    // only 2 left in the lot, so 3 is already short
     await fixture.createHqLot({
       pId,
-      remain: 10,
-      available: 2,
+      remain: 2,
       expiredDate: daysFromNow(30),
     });
 

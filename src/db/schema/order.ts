@@ -49,7 +49,6 @@ export const headOrderDetail = pgTable(
     hodId: serial("hod_id").notNull(),
     amount: integer("amount").notNull(),
     remain: integer("remain").notNull(),
-    available: integer("available").notNull().default(0),
     expiredDate: timestamp("expired_date").notNull(),
     supplierId: integer("supplier_id")
       .notNull()
@@ -72,10 +71,6 @@ export const headOrderDetail = pgTable(
     remainNonNegative: check(
       "head_order_detail_remain_nonnegative",
       sql`${table.remain} >= 0`,
-    ),
-    availableNonNegative: check(
-      "head_order_detail_available_nonnegative",
-      sql`${table.available} >= 0`,
     ),
   }),
 );
@@ -116,7 +111,6 @@ export const branchOrderDetail = pgTable(
     bodId: serial("bod_id").notNull(),
     amount: integer("amount").notNull(),
     remain: integer("remain").notNull(),
-    available: integer("available").notNull().default(0),
     expiredDate: timestamp("expired_date"),
     branchId: integer("branch_id")
       .notNull()
@@ -142,10 +136,6 @@ export const branchOrderDetail = pgTable(
     remainNonNegative: check(
       "branch_order_detail_remain_nonnegative",
       sql`${table.remain} >= 0`,
-    ),
-    availableNonNegative: check(
-      "branch_order_detail_available_nonnegative",
-      sql`${table.available} >= 0`,
     ),
   }),
 );

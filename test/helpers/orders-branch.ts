@@ -27,14 +27,8 @@ export interface TestUser {
 
 export interface HqLotInput {
   pId: number;
-  /** stock physically left in this lot — only a *receive* moves it */
+  /** stock this lot can still hand out — what `create` draws against */
   remain: number;
-  /**
-   * stock a branch order can still reserve — what `create` draws against.
-   * Defaults to `remain` (a lot nothing has been requested from yet); pass it
-   * lower to seed a lot whose stock is already spoken for by earlier orders.
-   */
-  available?: number;
   expiredDate: Date;
   basePrice?: number;
   /**
@@ -138,7 +132,6 @@ export async function setupOrdersBranchFixture(
     async createHqLot({
       pId,
       remain,
-      available = remain,
       expiredDate,
       basePrice = 0,
       status = "approved",
@@ -154,7 +147,6 @@ export async function setupOrdersBranchFixture(
         // received and what's left are the same
         amount: remain,
         remain,
-        available,
         expiredDate,
         supplierId: createdSupplier.supplierId,
         pId,

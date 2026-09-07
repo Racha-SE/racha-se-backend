@@ -194,7 +194,7 @@ describe("ordersBranchService.create", () => {
     expect(result.items[0].amount).toBe(5);
   });
 
-  test("deducts headOrderDetail.available, leaving remain for receive", async () => {
+  test("deducts headOrderDetail.remain", async () => {
     const pId = await fixture.createProduct();
     const { lotId } = await fixture.createHqLot({
       pId,
@@ -209,14 +209,12 @@ describe("ordersBranchService.create", () => {
       .from(headOrderDetail)
       .where(eq(headOrderDetail.lotId, lotId));
 
-    // requesting reserves stock, it doesn't move it: those 4 are no longer
-    // available to anyone else's order, but they're still physically HQ's
-    // until this branch receives them
-    expect(lot.available).toBe(6);
-    expect(lot.remain).toBe(10);
+    // requesting draws the lot down right away, so nobody else's order can
+    // see those 4 — branch_order_allocation is what puts them back on reject
+    expect(lot.remain).toBe(6);
   });
 
-  test("draws available down lot by lot, nearest expiry first", async () => {
+  test("draws stock down lot by lot, nearest expiry first", async () => {
     const pId = await fixture.createProduct();
     const nearest = await fixture.createHqLot({
       pId,
@@ -238,39 +236,35 @@ describe("ordersBranchService.create", () => {
       .where(inArray(headOrderDetail.lotId, [nearest.lotId, later.lotId]));
     const byLotId = new Map(lots.map((lot) => [lot.lotId, lot]));
 
-    expect(byLotId.get(nearest.lotId)).toMatchObject({
-      available: 0,
-      remain: 3,
-    });
-    expect(byLotId.get(later.lotId)).toMatchObject({
-      available: 8,
-      remain: 10,
-    });
+    expect(byLotId.get(nearest.lotId)).toMatchObject({ remain: 0 });
+    expect(byLotId.get(later.lotId)).toMatchObject({ remain: 8 });
   });
 
-  test("ignores stock that is left but already reserved by another order", async () => {
+  test("ignores stock an earlier order already drew", async () => {
     const pId = await fixture.createProduct();
-    // 10 still sitting in the lot, but 8 of them are already spoken for
     await fixture.createHqLot({
       pId,
       remain: 10,
-      available: 2,
       expiredDate: daysFromNow(30),
     });
+
+    // an earlier branch order took 8 of the 10, so only 2 are left to draw
+    await createOrder([{ pId, amount: 8 }]);
 
     const error = await expectAppError(createOrder([{ pId, amount: 3 }]));
 
     expect(error.code).toBe("INSUFFICIENT_STOCK");
   });
 
-  test("draws the last of a partly reserved lot", async () => {
+  test("draws the last of a partly drawn lot", async () => {
     const pId = await fixture.createProduct();
     const { lotId } = await fixture.createHqLot({
       pId,
       remain: 10,
-      available: 2,
       expiredDate: daysFromNow(30),
     });
+
+    await createOrder([{ pId, amount: 8 }]);
 
     const result = await createOrder([{ pId, amount: 2 }]);
 
@@ -281,8 +275,7 @@ describe("ordersBranchService.create", () => {
       .from(headOrderDetail)
       .where(eq(headOrderDetail.lotId, lotId));
 
-    expect(lot.available).toBe(0);
-    expect(lot.remain).toBe(10);
+    expect(lot.remain).toBe(0);
   });
 
   test("throws AppError(NOT_FOUND) when a pId does not exist", async () => {
@@ -371,13 +364,13 @@ describe("ordersBranchService.create", () => {
 
     expect(await countBranchOrders()).toBe(ordersBefore);
 
-    // the covered item's reservation has to roll back with the order —
+    // the covered item's deduction has to roll back with the order —
     // otherwise a failed request quietly eats stock nobody ordered
     const [coveredLot] = await db
       .select()
       .from(headOrderDetail)
       .where(eq(headOrderDetail.lotId, covered.lotId));
 
-    expect(coveredLot.available).toBe(10);
+    expect(coveredLot.remain).toBe(10);
   });
 });
