@@ -57,15 +57,19 @@ export const ordersBranchRoute = new Elysia({ prefix: "/orders/branch" })
         });
       }
 
-      return successResponse({
-        result: await ordersBranchService.create(id, branchId, body),
-      });
+      const createdOrderResult = await ordersBranchService.create(
+        id,
+        branchId,
+        body,
+      );
+
+      return successResponse(createdOrderResult);
     },
     {
       auth: ["branch"],
       body: OrdersBranchModel.createBody,
       response: {
-        200: tSuccessResponse(t.Object({ result: t.Null() })),
+        200: tSuccessResponse(OrdersBranchModel.createResponse),
         400: tErrorResponse("BAD_REQUEST"),
         404: tErrorResponse("NOT_FOUND"),
         409: tErrorResponse("INSUFFICIENT_STOCK"),
