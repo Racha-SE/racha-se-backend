@@ -31,6 +31,7 @@ export const ordersBranchService = {
     const now = new Date();
 
     return db.transaction(async (tx) => {
+      // Query all products and their head order details that are not expired and have available stock
       const products = await tx.query.product.findMany({
         columns: {
           pId: true,
@@ -63,8 +64,10 @@ export const ordersBranchService = {
         },
       });
 
+      // Create a map of products for easy access
       const productMap = new Map(products.map((item) => [item.pId, item]));
 
+      //Add new order to the database
       const [newOrder] = await tx
         .insert(order)
         .values({
@@ -75,6 +78,7 @@ export const ordersBranchService = {
 
       const hodIdsMapping: Omit<LotDeduction, "bodId">[][] = [];
 
+      // Create new branch order details and update head order details
       const newBOD = items.items.map((item) => {
         const product = productMap.get(item.pId);
         if (!product) {
@@ -128,6 +132,7 @@ export const ordersBranchService = {
 
       const deductions = hodIdsMapping.flat();
 
+      //update head order details to deduct the available stock based on the branch order details
       await tx.execute(sql`
         update ${headOrderDetail}
         set ${sql.identifier("available")} = ${headOrderDetail.available} - v.deduct
@@ -147,6 +152,7 @@ export const ordersBranchService = {
 
       const bodIds = branchOrderDetails.map((bod) => bod.bodId);
 
+      //insert branch order allocations to link the branch order details with the head order details
       const insertedBOAs: LotDeduction[] = hodIdsMapping.flatMap(
         (hodIds, index) => {
           const bodId = bodIds[index];
