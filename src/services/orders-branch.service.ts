@@ -53,7 +53,7 @@ export const ordersBranchService = {
                         eq(order.lotId, headOrderDetail.lotId),
                         eq(order.orderType, "hq"),
                         eq(order.status, "approved"),
-                        gt(headOrderDetail.available, 0),
+                        gt(headOrderDetail.remain, 0),
                       ),
                     ),
                 ),
@@ -88,7 +88,7 @@ export const ordersBranchService = {
         }
 
         const productHQSum = product.headOrderDetails.reduce(
-          (sum, hod) => sum + hod.available,
+          (sum, hod) => sum + hod.remain,
           0,
         );
 
@@ -106,7 +106,7 @@ export const ordersBranchService = {
 
         product.headOrderDetails.forEach((hod) => {
           if (item.amount <= 0) return;
-          const deductAmount = Math.min(hod.available, item.amount);
+          const deductAmount = Math.min(hod.remain, item.amount);
           item.amount -= deductAmount;
           expiredDates.push(hod.expiredDate);
           hodIds.push({ hodId: hod.hodId, amount: deductAmount });
@@ -120,7 +120,6 @@ export const ordersBranchService = {
           amount: branchItemAmount,
           branchId,
           remain: branchItemAmount,
-          available: branchItemAmount,
           costPrice: product.costPrice,
           basePrice: product.headOrderDetails[0].basePrice,
           expiredDate: expiredDates.reduce(
@@ -132,10 +131,10 @@ export const ordersBranchService = {
 
       const deductions = hodIdsMapping.flat();
 
-      //update head order details to deduct the available stock based on the branch order details
+      //update head order details to deduct the remaining stock based on the branch order details
       await tx.execute(sql`
         update ${headOrderDetail}
-        set ${sql.identifier("available")} = ${headOrderDetail.available} - v.deduct
+        set ${sql.identifier("remain")} = ${headOrderDetail.remain} - v.deduct
         from (values ${sql.join(
           deductions.map(
             ({ hodId, amount }) => sql`(${hodId}::int, ${amount}::int)`,
