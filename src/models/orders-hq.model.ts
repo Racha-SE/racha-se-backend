@@ -15,7 +15,6 @@ const lineItem = t.Object({
   amount: t.Number({ minimum: 1 }),
   expiredDate: t.String({ format: "date-time" }),
   basePrice: t.Number({ minimum: 0 }),
-  costPrice: t.Number({ minimum: 0 }),
 });
 
 const lineItemView = t.Omit(headOrderEntity, ["lotId"]);
