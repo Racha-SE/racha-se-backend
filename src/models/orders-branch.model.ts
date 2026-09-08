@@ -8,7 +8,7 @@ const branchOrderDetailEntity = createSelectSchema(branchOrderDetail);
 
 const requestLineItem = t.Object({
   pId: t.Number(),
-  amount: t.Number({ minimum: 1 }),
+  amount: t.Integer({ minimum: 1 }),
 });
 
 const lineItemView = t.Composite([
@@ -24,7 +24,7 @@ const BranchOrderView = t.Composite([
 const LotDeduction = t.Object({
   hodId: t.Number(),
   bodId: t.Number(),
-  amount: t.Number({ minimum: 1 }),
+  amount: t.Integer({ minimum: 1 }),
 });
 
 export const OrdersBranchModel = {
