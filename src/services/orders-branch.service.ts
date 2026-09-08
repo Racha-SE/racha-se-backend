@@ -38,7 +38,8 @@ export const ordersBranchService = {
           name: true,
           costPrice: true,
         },
-        where: (product, { inArray }) => inArray(product.pId, pIds),
+        where: (product, { inArray, and, eq }) =>
+          and(inArray(product.pId, pIds), eq(product.isActive, false)),
         with: {
           headOrderDetails: {
             where: (headOrderDetail, { and, gt, exists }) =>
