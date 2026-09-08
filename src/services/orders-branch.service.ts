@@ -4,7 +4,7 @@ import type {
   LotDeduction,
 } from "@/models/orders-branch.model";
 import { db } from "@/db/client";
-import { eq, sql } from "drizzle-orm";
+import { eq, inArray, sql } from "drizzle-orm";
 import {
   branchOrderAllocation,
   branchOrderDetail,
@@ -31,6 +31,14 @@ export const ordersBranchService = {
     const now = new Date();
 
     return db.transaction(async (tx) => {
+      //Lock for update
+      await tx
+        .select({ hodId: headOrderDetail.hodId })
+        .from(headOrderDetail)
+        .where(inArray(headOrderDetail.pId, pIds))
+        .orderBy(headOrderDetail.hodId)
+        .for("update");
+
       // Query all products and their head order details that are not expired and have available stock
       const products = await tx.query.product.findMany({
         columns: {
@@ -39,7 +47,7 @@ export const ordersBranchService = {
           costPrice: true,
         },
         where: (product, { inArray, and, eq }) =>
-          and(inArray(product.pId, pIds), eq(product.isActive, false)),
+          and(inArray(product.pId, pIds), eq(product.isActive, true)),
         with: {
           headOrderDetails: {
             where: (headOrderDetail, { and, gt, exists }) =>
@@ -100,15 +108,16 @@ export const ordersBranchService = {
         }
 
         const branchItemAmount = item.amount;
+        let itemRemain = item.amount;
 
         const expiredDates: Date[] = [];
 
         const hodIds: Omit<LotDeduction, "bodId">[] = [];
 
         product.headOrderDetails.forEach((hod) => {
-          if (item.amount <= 0) return;
-          const deductAmount = Math.min(hod.remain, item.amount);
-          item.amount -= deductAmount;
+          if (itemRemain <= 0) return;
+          const deductAmount = Math.min(hod.remain, itemRemain);
+          itemRemain -= deductAmount;
           expiredDates.push(hod.expiredDate);
           hodIds.push({ hodId: hod.hodId, amount: deductAmount });
         });
@@ -123,10 +132,7 @@ export const ordersBranchService = {
           remain: branchItemAmount,
           costPrice: product.costPrice,
           basePrice: product.headOrderDetails[0].basePrice,
-          expiredDate: expiredDates.reduce(
-            (minDate, date) => (date < minDate ? date : minDate),
-            expiredDates[0],
-          ),
+          expiredDate: expiredDates[0],
         };
       });
 
