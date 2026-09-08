@@ -4,20 +4,20 @@ import { OrdersHqModel } from "@/models/orders-hq.model";
 import { ordersHqService } from "@/services/orders-hq.service";
 import { successResponse, tErrorResponse, tSuccessResponse } from "@/utils";
 
-const stubResponse = {
-  200: tSuccessResponse(t.Object({ result: t.Null() })),
-  500: tErrorResponse("INTERNAL_SERVER_ERROR"),
-};
-
 export const ordersHqRoute = new Elysia({ prefix: "/orders/hq" })
   .use(authPlugin)
   .post(
     "/",
-    async () => successResponse({ result: await ordersHqService.create() }),
+    async ({ user, body }) =>
+      successResponse({ result: await ordersHqService.create(user.id, body) }),
     {
-      auth: true, // change later
+      auth: ["hq"],
       body: OrdersHqModel.createBody,
-      response: stubResponse,
+      response: {
+        201: tSuccessResponse(t.Object({ result: t.Null() })),
+        404: tErrorResponse("NOT_FOUND"),
+        500: tErrorResponse("INTERNAL_SERVER_ERROR"),
+      },
       detail: {
         summary: "Add a new HQ order",
         description:
