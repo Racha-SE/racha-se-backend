@@ -8,8 +8,8 @@ export const ordersHqRoute = new Elysia({ prefix: "/orders/hq" })
   .use(authPlugin)
   .post(
     "/",
-    async ({ user, body }) =>
-      successResponse({ result: await ordersHqService.create(user.id, body) }),
+    async ({ user, body, status }) =>
+      status(201, successResponse(await ordersHqService.create(user.id, body))),
     {
       auth: ["hq"],
       body: OrdersHqModel.createBody,
