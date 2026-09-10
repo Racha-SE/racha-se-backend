@@ -1,10 +1,11 @@
 import type {
   OrdersBranchCreateBody,
   OrdersBranchCreateResponse,
+  OrdersBranchGetByLotIdResponse,
   LotDeduction,
 } from "@/models/orders-branch.model";
 import { db } from "@/db/client";
-import { eq, inArray, sql } from "drizzle-orm";
+import { and, eq, gt, inArray, sql } from "drizzle-orm";
 import {
   branchOrderAllocation,
   branchOrderDetail,
@@ -12,14 +13,76 @@ import {
   order,
 } from "@/db/schema";
 import { AppError } from "@/utils/error";
+import { UserType } from "@/utils/types";
 
 export const ordersBranchService = {
-  list(): Promise<null> {
-    return Promise.resolve(null);
+  list(userType: UserType, branchId?: number) {
+    return Promise.resolve({
+      userType,
+      branchId,
+    });
   },
 
-  getById(): Promise<null> {
-    return Promise.resolve(null);
+  async getById(
+    lotId: number,
+    userType: UserType,
+    userId: string,
+  ): Promise<OrdersBranchGetByLotIdResponse> {
+    const branchOrder = await db.query.order.findFirst({
+      where: (order, { and, eq }) =>
+        and(eq(order.lotId, lotId), eq(order.orderType, "branch")),
+      with: {
+        branchOrderDetails: {
+          orderBy: (branchOrderDetail, { asc }) => asc(branchOrderDetail.bodId),
+        },
+      },
+    });
+
+    if (!branchOrder) {
+      throw new AppError("NOT_FOUND", {
+        message: "Branch order not found",
+      });
+    }
+
+    if (userType === "branch" && branchOrder.userId !== userId) {
+      throw new AppError("FORBIDDEN", {
+        message: "This branch order belongs to another branch",
+      });
+    }
+
+    const { branchOrderDetails, ...orderFields } = branchOrder;
+    const pIds = branchOrderDetails.map((item) => item.pId);
+
+    const availability = pIds.length
+      ? await db
+          .select({
+            pId: headOrderDetail.pId,
+            availableAmount: sql<number>`coalesce(sum(${headOrderDetail.remain}), 0)::int`,
+          })
+          .from(headOrderDetail)
+          .innerJoin(order, eq(order.lotId, headOrderDetail.lotId))
+          .where(
+            and(
+              inArray(headOrderDetail.pId, pIds),
+              gt(headOrderDetail.expiredDate, new Date()),
+              eq(order.orderType, "hq"),
+              eq(order.status, "approved"),
+            ),
+          )
+          .groupBy(headOrderDetail.pId)
+      : [];
+
+    const availableMap = new Map(
+      availability.map((row) => [row.pId, row.availableAmount]),
+    );
+
+    return {
+      ...orderFields,
+      items: branchOrderDetails.map(({ lotId: _, ...item }) => ({
+        ...item,
+        availableAmount: availableMap.get(item.pId) ?? 0,
+      })),
+    };
   },
 
   async create(
