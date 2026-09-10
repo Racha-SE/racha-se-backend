@@ -1,10 +1,11 @@
 import { type Static, t } from "elysia";
 import { createSelectSchema } from "drizzle-typebox";
-import { branchOrderDetail, order } from "@/db/schema";
+import { branchOrderDetail, order, branch } from "@/db/schema";
 import { AppError } from "@/utils/error";
 
 const orderEntity = createSelectSchema(order);
 const branchOrderDetailEntity = createSelectSchema(branchOrderDetail);
+const branchEntity = createSelectSchema(branch);
 
 const requestLineItem = t.Object({
   pId: t.Number(),
@@ -27,6 +28,11 @@ const LotDeduction = t.Object({
   amount: t.Integer({ minimum: 1 }),
 });
 
+const BranchOrders = t.Composite([
+  t.Pick(branchEntity, ["branchId"]),
+  t.Object({ orders: t.Array(BranchOrderView) }),
+]);
+
 export const OrdersBranchModel = {
   params: t.Object({ lotId: t.Numeric() }),
   createBody: t.Object({
@@ -44,7 +50,8 @@ export const OrdersBranchModel = {
       })
       .Encode((items) => items),
   }),
-  detail: BranchOrderView,
+  getBranchOrders: t.Union([BranchOrders, t.Array(BranchOrders)]),
+  getBranchOrderByLotId: BranchOrderView,
   createResponse: t.Composite([
     orderEntity,
     t.Object({
@@ -53,7 +60,12 @@ export const OrdersBranchModel = {
   ]),
 };
 
-export type OrdersBranchDetail = Static<typeof OrdersBranchModel.detail>;
+export type OrdersBranchGetResponse = Static<
+  typeof OrdersBranchModel.getBranchOrders
+>;
+export type OrdersBranchGetByLotIdResponse = Static<
+  typeof OrdersBranchModel.getBranchOrderByLotId
+>;
 export type OrdersBranchCreateBody = Static<
   typeof OrdersBranchModel.createBody
 >;

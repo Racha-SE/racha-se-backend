@@ -18,10 +18,19 @@ export const ordersBranchRoute = new Elysia({ prefix: "/orders/branch" })
   .use(authPlugin)
   .get(
     "/",
-    async () => successResponse({ result: await ordersBranchService.list() }),
+    ({ user }) => {
+      const { userType: _userType, branchId: _branchId } = user;
+
+      return successResponse({
+        result: null,
+      });
+    },
     {
-      auth: true, // change later
-      response: stubResponse,
+      auth: ["hq", "branch"], // change later
+      response: {
+        200: tSuccessResponse(t.Object({ result: t.Null() })),
+        500: tErrorResponse("INTERNAL_SERVER_ERROR"),
+      },
       detail: {
         summary: "List branch orders",
         description:
@@ -32,12 +41,22 @@ export const ordersBranchRoute = new Elysia({ prefix: "/orders/branch" })
   )
   .get(
     "/:lotId",
-    async () =>
-      successResponse({ result: await ordersBranchService.getById() }),
+    async ({ user, params }) => {
+      const { userType, id } = user;
+
+      return successResponse(
+        await ordersBranchService.getById(params.lotId, userType, id),
+      );
+    },
     {
-      auth: true, // change later
+      auth: ["hq", "branch"], // change later
       params: OrdersBranchModel.params,
-      response: stubResponse,
+      response: {
+        200: tSuccessResponse(OrdersBranchModel.getBranchOrderByLotId),
+        403: tErrorResponse("FORBIDDEN"),
+        404: tErrorResponse("NOT_FOUND"),
+        500: tErrorResponse("INTERNAL_SERVER_ERROR"),
+      },
       detail: {
         summary: "Get one branch order",
         description:
@@ -88,7 +107,7 @@ export const ordersBranchRoute = new Elysia({ prefix: "/orders/branch" })
     async () =>
       successResponse({ result: await ordersBranchService.approve() }),
     {
-      auth: true, // change later
+      auth: ["hq"], // change later
       params: OrdersBranchModel.params,
       response: {
         ...stubResponse,
@@ -106,7 +125,7 @@ export const ordersBranchRoute = new Elysia({ prefix: "/orders/branch" })
     "/:lotId/reject",
     async () => successResponse({ result: await ordersBranchService.reject() }),
     {
-      auth: true, // change later
+      auth: ["hq"], // change later
       params: OrdersBranchModel.params,
       response: stubResponse,
       detail: {
@@ -121,7 +140,7 @@ export const ordersBranchRoute = new Elysia({ prefix: "/orders/branch" })
     async () =>
       successResponse({ result: await ordersBranchService.receive() }),
     {
-      auth: true, // change later
+      auth: ["branch"], // change later
       params: OrdersBranchModel.params,
       response: stubResponse,
       detail: {
