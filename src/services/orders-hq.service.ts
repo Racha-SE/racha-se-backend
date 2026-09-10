@@ -1,6 +1,12 @@
 import { and, eq, gte, inArray, isNull, sql } from "drizzle-orm";
 import { db } from "@/db/client";
-import { headOrderDetail, notification, order, product } from "@/db/schema";
+import {
+  headOrderDetail,
+  notification,
+  order,
+  product,
+  supplier,
+} from "@/db/schema";
 import type { OrdersHqCreateBody } from "@/models/orders-hq.model";
 import { AppError } from "@/utils";
 
@@ -13,6 +19,10 @@ export const ordersHqService = {
         where: (product, { inArray, and, eq }) =>
           and(inArray(product.pId, productIds), eq(product.isActive, true)),
       });
+
+      const suppliers = await tx
+        .select({ supplierId: supplier.supplierId })
+        .from(supplier);
 
       const mappedProducts = new Map(
         products.map((product) => [product.pId, product]),
@@ -35,6 +45,15 @@ export const ordersHqService = {
           throw new AppError("NOT_FOUND", {
             message: "product not found",
             pId: item.pId,
+          });
+        }
+
+        if (
+          !suppliers.find(({ supplierId }) => supplierId === item.supplierId)
+        ) {
+          throw new AppError("NOT_FOUND", {
+            message: "supplier not found",
+            supplierId: item.supplierId,
           });
         }
 
