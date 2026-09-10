@@ -1,8 +1,6 @@
 import { Elysia } from "elysia";
-import { userTypeEnum } from "@/db/schema/user";
+import type { UserType } from "@/utils/types";
 import { auth } from "@/utils";
-
-type UserType = (typeof userTypeEnum.enumValues)[number];
 
 // .macro({ auth: {...} }) — routes opt in via `{ auth: true }` (any signed-in
 // user) or `{ auth: ["hq"] }` (only those userTypes). Gates on `userType`
