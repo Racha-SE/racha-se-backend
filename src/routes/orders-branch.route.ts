@@ -44,10 +44,14 @@ export const ordersBranchRoute = new Elysia({ prefix: "/orders/branch" })
   .get(
     "/:lotId",
     async ({ user, params }) => {
-      const { userType, id } = user;
+      const { userType, branchId } = user;
 
       return successResponse(
-        await ordersBranchService.getById(params.lotId, userType, id),
+        await ordersBranchService.getById(
+          params.lotId,
+          userType,
+          branchId ?? undefined,
+        ),
       );
     },
     {
