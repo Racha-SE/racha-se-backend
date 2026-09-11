@@ -2,21 +2,21 @@ import { Elysia, t } from "elysia";
 import { authPlugin } from "@/plugins/auth.plugin";
 import { CategoriesModel } from "@/models/categories.model";
 import { categoriesService } from "@/services/categories.service";
-import { successResponse, tErrorResponse, tSuccessResponse } from "@/utils";
-
-const stubResponse = {
-  200: tSuccessResponse(t.Object({ result: t.Null() })),
-  500: tErrorResponse("INTERNAL_SERVER_ERROR"),
-};
+import { successResponse, tSuccessResponse, tErrorResponse } from "@/utils";
 
 export const categoriesRoute = new Elysia({ prefix: "/categories" })
   .use(authPlugin)
+
   .get(
     "/",
     async () => successResponse({ result: await categoriesService.list() }),
     {
-      auth: true, // change later
-      response: stubResponse,
+      auth: ["hq", "branch"],
+      response: {
+        200: tSuccessResponse(
+          t.Object({ result: t.Array(CategoriesModel.entity) }),
+        ),
+      },
       detail: {
         summary: "List categories",
         description:
@@ -25,13 +25,18 @@ export const categoriesRoute = new Elysia({ prefix: "/categories" })
       },
     },
   )
+
   .get(
     "/:id",
-    async () => successResponse({ result: await categoriesService.getById() }),
+    async ({ params: { id } }) =>
+      successResponse({ result: await categoriesService.getById(id) }),
     {
-      auth: true, // change later
+      auth: ["hq", "branch"],
       params: CategoriesModel.params,
-      response: stubResponse,
+      response: {
+        200: tSuccessResponse(t.Object({ result: CategoriesModel.entity })),
+        404: tErrorResponse("NOT_FOUND"),
+      },
       detail: {
         summary: "Get a single category",
         description: "View one category's details.",
@@ -39,13 +44,18 @@ export const categoriesRoute = new Elysia({ prefix: "/categories" })
       },
     },
   )
+
   .post(
     "/",
-    async () => successResponse({ result: await categoriesService.create() }),
+    async ({ body }) =>
+      successResponse({ result: await categoriesService.create(body) }),
     {
-      auth: true, // change later
+      auth: ["hq"],
       body: CategoriesModel.createBody,
-      response: stubResponse,
+      response: {
+        200: tSuccessResponse(t.Object({ result: CategoriesModel.entity })),
+        409: tErrorResponse("ALREADY_EXISTS"),
+      },
       detail: {
         summary: "Create a category",
         description:
@@ -54,14 +64,20 @@ export const categoriesRoute = new Elysia({ prefix: "/categories" })
       },
     },
   )
+
   .patch(
     "/:id",
-    async () => successResponse({ result: await categoriesService.update() }),
+    async ({ params: { id }, body }) =>
+      successResponse({ result: await categoriesService.update(id, body) }),
     {
-      auth: true, // change later
+      auth: ["hq"],
       params: CategoriesModel.params,
       body: CategoriesModel.updateBody,
-      response: stubResponse,
+      response: {
+        200: tSuccessResponse(t.Object({ result: CategoriesModel.entity })),
+        404: tErrorResponse("NOT_FOUND"),
+        409: tErrorResponse("ALREADY_EXISTS"),
+      },
       detail: {
         summary: "Update a category",
         description: "Rename an existing category.",
@@ -69,13 +85,19 @@ export const categoriesRoute = new Elysia({ prefix: "/categories" })
       },
     },
   )
+
   .delete(
     "/:id",
-    async () => successResponse({ result: await categoriesService.remove() }),
+    async ({ params: { id } }) =>
+      successResponse({ result: await categoriesService.remove(id) }),
     {
-      auth: true, // change later
+      auth: ["hq"],
       params: CategoriesModel.params,
-      response: stubResponse,
+      response: {
+        200: tSuccessResponse(t.Object({ result: CategoriesModel.entity })),
+        404: tErrorResponse("NOT_FOUND"),
+        409: tErrorResponse("CATEGORY_IN_USE"),
+      },
       detail: {
         summary: "Delete a category",
         description:
