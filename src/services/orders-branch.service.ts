@@ -462,7 +462,8 @@ export const ordersBranchService = {
   // received, and open/keep an HQ min_stock notification per product if the
   // HQ lot(s) remaining stock drops below product.minStockHq — see
   // notification.service.ts's top comment.
-  receive(): Promise<null> {
+  receive(lotid: number): Promise<null> {
+    console.log(lotid);
     return Promise.resolve(null);
   },
 };
