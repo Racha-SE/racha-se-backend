@@ -151,15 +151,15 @@ export const ordersBranchRoute = new Elysia({ prefix: "/orders/branch" })
   )
   .patch(
     "/:lotId/receive",
-    async ({ params }) =>
-      successResponse({
-        result: await ordersBranchService.receive(params.lotId),
-      }),
+    async ({ params }) => {
+      await ordersBranchService.receive(params.lotId);
+      return successResponse({ message: "branch order received" });
+    },
     {
       auth: ["branch"], // change later
       params: OrdersBranchModel.params,
       response: {
-        200: tSuccessResponse(t.Object({ result: t.Null() })),
+        200: tSuccessResponse(OrdersBranchModel.receiveResponse),
         404: tErrorResponse("NOT_FOUND"),
         500: tErrorResponse("INTERNAL_SERVER_ERROR"),
       },

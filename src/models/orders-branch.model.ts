@@ -88,6 +88,9 @@ export const OrdersBranchModel = {
   createResponse: orderWithItems,
   approveResponse: orderWithItems,
   rejectResponse: orderWithItems,
+  receiveResponse: t.Object({
+    message: t.String(),
+  }),
 };
 
 export type OrdersBranchQuery = Static<
