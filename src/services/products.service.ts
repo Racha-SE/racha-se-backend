@@ -153,7 +153,6 @@ export const productsService = {
 
     await assertBarcodeAvailable(cleanBarcode);
 
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars -- categoryIds is not a product column; strip it out before insert
     const { categoryIds: _categoryIds, ...productData } = body;
     return await db.transaction(async (tx) => {
       try {
@@ -203,7 +202,6 @@ export const productsService = {
     // Validate update fields if present
     validateProductFields(body);
 
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars -- categoryIds is not a product column; strip it out before update
     const { categoryIds: _categoryIds, ...updateData } = body;
     // Sanitize string fields
     if (updateData.name) updateData.name = updateData.name.trim();
