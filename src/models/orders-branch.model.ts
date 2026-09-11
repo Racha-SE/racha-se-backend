@@ -1,6 +1,6 @@
 import { type Static, t } from "elysia";
 import { createSelectSchema } from "drizzle-typebox";
-import { branchOrderDetail, order, branch } from "@/db/schema";
+import { branchOrderDetail, order, branch, orderStatusEnum } from "@/db/schema";
 import { AppError } from "@/utils/error";
 
 const orderEntity = createSelectSchema(order);
@@ -22,6 +22,11 @@ const BranchOrderView = t.Composite([
   t.Object({ items: t.Array(lineItemView) }),
 ]);
 
+const BranchOrderViewWithoutAvailableAmount = t.Composite([
+  orderEntity,
+  t.Object({ items: t.Array(t.Omit(branchOrderDetailEntity, ["lotId"])) }),
+]);
+
 const LotDeduction = t.Object({
   hodId: t.Number(),
   bodId: t.Number(),
@@ -29,12 +34,37 @@ const LotDeduction = t.Object({
 });
 
 const BranchOrders = t.Composite([
-  t.Pick(branchEntity, ["branchId"]),
-  t.Object({ orders: t.Array(BranchOrderView) }),
+  t.Object({
+    orders: t.Array(
+      t.Composite([
+        BranchOrderViewWithoutAvailableAmount,
+        t.Pick(branchEntity, ["branchId"]),
+      ]),
+    ),
+  }),
+  t.Object({
+    limit: t.Number(),
+    offset: t.Number(),
+    totals: t.Number(),
+  }),
 ]);
+
+const orderStatusSchema = t.Union(
+  orderStatusEnum.enumValues.map((value) => t.Literal(value)),
+);
+
+const GetBranchOrdersQuery = t.Partial(
+  t.Object({
+    status: orderStatusSchema,
+    branchId: t.Numeric(),
+    limit: t.Numeric(),
+    offset: t.Numeric(),
+  }),
+);
 
 export const OrdersBranchModel = {
   params: t.Object({ lotId: t.Numeric() }),
+  getBranchOrdersQuery: GetBranchOrdersQuery,
   createBody: t.Object({
     items: t
       .Transform(t.Array(requestLineItem, { minItems: 1 }))
@@ -50,7 +80,7 @@ export const OrdersBranchModel = {
       })
       .Encode((items) => items),
   }),
-  getBranchOrders: t.Union([BranchOrders, t.Array(BranchOrders)]),
+  getBranchOrders: BranchOrders,
   getBranchOrderByLotId: BranchOrderView,
   createResponse: t.Composite([
     orderEntity,
@@ -60,6 +90,9 @@ export const OrdersBranchModel = {
   ]),
 };
 
+export type OrdersBranchQuery = Static<
+  typeof OrdersBranchModel.getBranchOrdersQuery
+>;
 export type OrdersBranchGetResponse = Static<
   typeof OrdersBranchModel.getBranchOrders
 >;

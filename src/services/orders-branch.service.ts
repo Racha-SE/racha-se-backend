@@ -2,25 +2,99 @@ import type {
   OrdersBranchCreateBody,
   OrdersBranchCreateResponse,
   OrdersBranchGetByLotIdResponse,
+  OrdersBranchGetResponse,
   LotDeduction,
+  OrdersBranchQuery,
 } from "@/models/orders-branch.model";
 import { db } from "@/db/client";
-import { and, eq, gt, inArray, sql } from "drizzle-orm";
+import { and, asc, count, desc, eq, gt, inArray, sql } from "drizzle-orm";
 import {
+  branch,
   branchOrderAllocation,
   branchOrderDetail,
   headOrderDetail,
   order,
+  user,
 } from "@/db/schema";
 import { AppError } from "@/utils/error";
 import { UserType } from "@/utils/types";
 
+const DEFAULT_LIMIT = 10;
+
 export const ordersBranchService = {
-  list(userType: UserType, branchId?: number) {
-    return Promise.resolve({
-      userType,
-      branchId,
-    });
+  async list(
+    userType: UserType,
+    query: OrdersBranchQuery,
+    branchId?: number,
+  ): Promise<OrdersBranchGetResponse> {
+    const scopedBranchId = userType === "hq" ? query.branchId : branchId;
+
+    if (userType !== "hq" && scopedBranchId === undefined) {
+      throw new AppError("BAD_REQUEST", {
+        message: "Branch ID is required for listing branch orders.",
+      });
+    }
+
+    const limit = query.limit ?? DEFAULT_LIMIT;
+    const offset = query.offset ?? 0;
+
+    const where = and(
+      eq(order.orderType, "branch"),
+      query.status ? eq(order.status, query.status) : undefined,
+      scopedBranchId !== undefined
+        ? eq(branch.branchId, scopedBranchId)
+        : undefined,
+    );
+
+    const [rows, [{ totals }]] = await Promise.all([
+      db
+        .select({ order, branchId: branch.branchId })
+        .from(order)
+        .innerJoin(user, eq(user.id, order.userId))
+        .innerJoin(branch, eq(branch.branchId, user.branchId))
+        .where(where)
+        .orderBy(desc(order.createdAt), desc(order.lotId))
+        .limit(limit)
+        .offset(offset),
+      db
+        .select({ totals: count() })
+        .from(order)
+        .innerJoin(user, eq(user.id, order.userId))
+        .innerJoin(branch, eq(branch.branchId, user.branchId))
+        .where(where),
+    ]);
+
+    const lotIds = rows.map((row) => row.order.lotId);
+
+    const details = lotIds.length
+      ? await db
+          .select()
+          .from(branchOrderDetail)
+          .where(inArray(branchOrderDetail.lotId, lotIds))
+          .orderBy(asc(branchOrderDetail.bodId))
+      : [];
+
+    const itemsByLotId = new Map<
+      number,
+      Omit<(typeof details)[number], "lotId">[]
+    >();
+
+    for (const { lotId, ...item } of details) {
+      const items = itemsByLotId.get(lotId) ?? [];
+      items.push(item);
+      itemsByLotId.set(lotId, items);
+    }
+
+    return {
+      orders: rows.map((row) => ({
+        ...row.order,
+        branchId: row.branchId,
+        items: itemsByLotId.get(row.order.lotId) ?? [],
+      })),
+      limit,
+      offset,
+      totals,
+    };
   },
 
   async getById(

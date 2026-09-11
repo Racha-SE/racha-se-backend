@@ -18,23 +18,25 @@ export const ordersBranchRoute = new Elysia({ prefix: "/orders/branch" })
   .use(authPlugin)
   .get(
     "/",
-    ({ user }) => {
-      const { userType: _userType, branchId: _branchId } = user;
+    async ({ user, query }) => {
+      const { userType, branchId } = user;
 
-      return successResponse({
-        result: null,
-      });
+      return successResponse(
+        await ordersBranchService.list(userType, query, branchId ?? undefined),
+      );
     },
     {
       auth: ["hq", "branch"], // change later
+      query: OrdersBranchModel.getBranchOrdersQuery,
       response: {
-        200: tSuccessResponse(t.Object({ result: t.Null() })),
+        200: tSuccessResponse(OrdersBranchModel.getBranchOrders),
+        400: tErrorResponse("BAD_REQUEST"),
         500: tErrorResponse("INTERNAL_SERVER_ERROR"),
       },
       detail: {
         summary: "List branch orders",
         description:
-          "List stock transfer orders sent to a branch, scoped to the caller's branch.",
+          "List stock transfer orders sent to a branch, newest first. HQ sees every branch and can narrow with ?branchId; a branch caller is always scoped to its own branch, whatever it passes. Paginated with ?limit (default 10) and ?offset; `totals` is the unpaginated match count.",
         tags: ["Orders Branch"],
       },
     },
