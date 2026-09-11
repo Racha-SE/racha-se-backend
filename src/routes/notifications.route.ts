@@ -9,6 +9,11 @@ const stubResponse = {
   500: tErrorResponse("INTERNAL_SERVER_ERROR"),
 };
 
+const hqAlertResponse = {
+  200: tSuccessResponse(NotificationModel.alertListResult),
+  500: tErrorResponse("INTERNAL_SERVER_ERROR"),
+};
+
 export const notificationsRoute = new Elysia({ prefix: "/notifications" })
   .use(authPlugin)
   .get(
@@ -16,12 +21,12 @@ export const notificationsRoute = new Elysia({ prefix: "/notifications" })
     async () =>
       successResponse({ result: await notificationService.listHqExpire() }),
     {
-      auth: true, // change later
-      response: stubResponse,
+      auth: ["hq"],
+      response: hqAlertResponse,
       detail: {
         summary: "List open HQ expire notifications",
         description:
-          "Unresolved expire notifications scoped to HQ (branchId null). See notification.service.ts for which order-flow actions are meant to create/resolve these — not wired in yet.",
+          "Unresolved expire notifications scoped to HQ (branchId null), joined with product name/barcode. Writing/resolving these alerts isn't wired in yet — see notification.service.ts for the order-flow actions meant to do it.",
         tags: ["Notifications"],
       },
     },
@@ -31,12 +36,12 @@ export const notificationsRoute = new Elysia({ prefix: "/notifications" })
     async () =>
       successResponse({ result: await notificationService.listHqMinStock() }),
     {
-      auth: true, // change later
-      response: stubResponse,
+      auth: ["hq"],
+      response: hqAlertResponse,
       detail: {
         summary: "List open HQ min_stock notifications",
         description:
-          "Unresolved min_stock notifications scoped to HQ (branchId null). See notification.service.ts for which order-flow actions are meant to create/resolve these — not wired in yet.",
+          "Unresolved min_stock notifications scoped to HQ (branchId null), joined with product name/barcode. Writing/resolving these alerts isn't wired in yet — see notification.service.ts for the order-flow actions meant to do it.",
         tags: ["Notifications"],
       },
     },
