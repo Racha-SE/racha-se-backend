@@ -149,7 +149,7 @@ export const ordersBranchRoute = new Elysia({ prefix: "/orders/branch" })
       },
     },
   )
-  .post(
+  .patch(
     "/:lotId/receive",
     async () =>
       successResponse({ result: await ordersBranchService.receive() }),
