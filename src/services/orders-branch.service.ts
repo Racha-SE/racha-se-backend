@@ -100,7 +100,7 @@ export const ordersBranchService = {
   async getById(
     lotId: number,
     userType: UserType,
-    userId: string,
+    branchId?: number,
   ): Promise<OrdersBranchGetByLotIdResponse> {
     const branchOrder = await db.query.order.findFirst({
       where: (order, { and, eq }) =>
@@ -108,6 +108,11 @@ export const ordersBranchService = {
       with: {
         branchOrderDetails: {
           orderBy: (branchOrderDetail, { asc }) => asc(branchOrderDetail.bodId),
+        },
+        user: {
+          columns: {
+            branchId: true,
+          },
         },
       },
     });
@@ -118,13 +123,13 @@ export const ordersBranchService = {
       });
     }
 
-    if (userType === "branch" && branchOrder.userId !== userId) {
+    if (userType === "branch" && branchOrder.user.branchId !== branchId) {
       throw new AppError("FORBIDDEN", {
         message: "This branch order belongs to another branch",
       });
     }
 
-    const { branchOrderDetails, ...orderFields } = branchOrder;
+    const { branchOrderDetails, user: _, ...orderFields } = branchOrder;
     const pIds = branchOrderDetails.map((item) => item.pId);
 
     const availability = pIds.length
