@@ -12,13 +12,13 @@ export const ProductsModel = {
   params: t.Object({
     id: t.Numeric(),
   }),
-  listQuery: t.Object({
-    search: t.Optional(t.String()),
-    categoryId: t.Optional(t.Numeric()),
-    isActive: t.Optional(t.Boolean()),
-    limit: t.Optional(t.Numeric()),
-    offset: t.Optional(t.Numeric()),
-  }),
+  listQuery: t.Partial(t.Object({
+    search: t.String(),
+    categoryId: t.Numeric(),
+    isActive: t.Boolean(),
+    limit: t.Numeric(),
+    offset: t.Numeric(),
+  })),
   listResult: t.Object({
     products: t.Array(entity),
     total: t.Number(),
