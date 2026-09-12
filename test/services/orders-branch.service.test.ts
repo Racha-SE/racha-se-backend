@@ -10,6 +10,7 @@ import {
 import type {
   OrdersBranchApproveResponse,
   OrdersBranchCreateResponse,
+  OrdersBranchRejectResponse,
 } from "@/models/orders-branch.model";
 import { ordersBranchService } from "@/services/orders-branch.service";
 import { AppError } from "@/utils";
@@ -39,6 +40,10 @@ function createOrder(
 
 function approveOrder(lotId: number): Promise<OrdersBranchApproveResponse> {
   return ordersBranchService.approve(lotId, fixture.hqUser.id);
+}
+
+function rejectOrder(lotId: number): Promise<OrdersBranchRejectResponse> {
+  return ordersBranchService.reject(lotId);
 }
 
 async function expectAppError(promise: Promise<unknown>): Promise<AppError> {
@@ -425,5 +430,94 @@ describe("ordersBranchService.approve", () => {
     await expectAppError(approveOrder(requested.lotId));
 
     expect((await lotById(hqLotId)).remain).toBe(6);
+  });
+});
+
+describe("ordersBranchService.reject", () => {
+  test("marks the order rejected and returns it with its line items", async () => {
+    const pId = await fixture.createProduct(15);
+    const { lotId: hqLotId } = await fixture.createHqLot({
+      pId,
+      remain: 10,
+      expiredDate: daysFromNow(30),
+    });
+    const requested = await createOrder([{ pId, amount: 4 }]);
+
+    const result = await rejectOrder(requested.lotId);
+
+    expect(result.lotId).toBe(requested.lotId);
+    expect(result.status).toBe("rejected");
+
+    expect(result.items).toHaveLength(1);
+    expect(result.items[0]).toMatchObject({ pId, amount: 4, remain: 0 });
+    // a rejected request never held any stock, so there's nothing to give
+    // back — the lot is untouched either way
+    expect((await lotById(hqLotId)).remain).toBe(10);
+  });
+
+  test("throws AppError(NOT_FOUND) for a lotId that does not exist", async () => {
+    const [{ highest }] = await db
+      .select({ highest: max(order.lotId) })
+      .from(order);
+
+    const error = await expectAppError(rejectOrder((highest ?? 0) + 1000));
+
+    expect(error.code).toBe("NOT_FOUND");
+    expect(error.httpStatus).toBe(404);
+  });
+
+  test("throws AppError(NOT_FOUND) for an HQ order's lotId", async () => {
+    const pId = await fixture.createProduct();
+    const { lotId } = await fixture.createHqLot({
+      pId,
+      remain: 5,
+      expiredDate: daysFromNow(30),
+    });
+
+    const error = await expectAppError(rejectOrder(lotId));
+
+    expect(error.code).toBe("NOT_FOUND");
+  });
+
+  test("throws AppError(BAD_REQUEST) for an order that was already approved", async () => {
+    const pId = await fixture.createProduct();
+    await fixture.createHqLot({
+      pId,
+      remain: 10,
+      expiredDate: daysFromNow(30),
+    });
+    const requested = await createOrder([{ pId, amount: 2 }]);
+    await approveOrder(requested.lotId);
+
+    const error = await expectAppError(rejectOrder(requested.lotId));
+
+    expect(error.code).toBe("BAD_REQUEST");
+    expect(error.httpStatus).toBe(400);
+  });
+
+  test("throws AppError(BAD_REQUEST) when rejected twice", async () => {
+    const pId = await fixture.createProduct();
+    const requested = await createOrder([{ pId, amount: 2 }]);
+    await rejectOrder(requested.lotId);
+
+    const error = await expectAppError(rejectOrder(requested.lotId));
+
+    expect(error.code).toBe("BAD_REQUEST");
+  });
+
+  test("cannot be approved after it has been rejected", async () => {
+    const pId = await fixture.createProduct();
+    const { lotId: hqLotId } = await fixture.createHqLot({
+      pId,
+      remain: 10,
+      expiredDate: daysFromNow(30),
+    });
+    const requested = await createOrder([{ pId, amount: 4 }]);
+    await rejectOrder(requested.lotId);
+
+    const error = await expectAppError(approveOrder(requested.lotId));
+
+    expect(error.code).toBe("BAD_REQUEST");
+    expect((await lotById(hqLotId)).remain).toBe(10);
   });
 });

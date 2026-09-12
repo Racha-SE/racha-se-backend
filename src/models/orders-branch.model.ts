@@ -88,6 +88,7 @@ export const OrdersBranchModel = {
   detail: BranchOrderView,
   createResponse: orderWithItems,
   approveResponse: orderWithItems,
+  rejectResponse: orderWithItems,
 };
 
 export type OrdersBranchQuery = Static<
@@ -107,4 +108,7 @@ export type OrdersBranchCreateResponse = Static<
 >;
 export type OrdersBranchApproveResponse = Static<
   typeof OrdersBranchModel.approveResponse
+>;
+export type OrdersBranchRejectResponse = Static<
+  typeof OrdersBranchModel.rejectResponse
 >;

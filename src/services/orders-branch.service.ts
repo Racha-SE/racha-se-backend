@@ -5,6 +5,7 @@ import type {
   OrdersBranchGetByLotIdResponse,
   OrdersBranchGetResponse,
   OrdersBranchQuery,
+  OrdersBranchRejectResponse,
 } from "@/models/orders-branch.model";
 import { db } from "@/db/client";
 import { and, asc, count, desc, eq, gt, inArray, sql } from "drizzle-orm";
@@ -19,6 +20,36 @@ import { AppError } from "@/utils/error";
 import { UserType } from "@/utils/hierarchy";
 
 const DEFAULT_LIMIT = 10;
+
+type Transaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
+
+/**
+ * Reads the branch order at `lotId` and holds it for the rest of the
+ * transaction, so approve and reject can't both land on the same pending
+ * order. Fails the way both routes document it: 404 when there's no such
+ * branch order, 400 when someone has already decided on it.
+ */
+async function lockPendingOrder(tx: Transaction, lotId: number) {
+  const [existing] = await tx
+    .select()
+    .from(order)
+    .where(and(eq(order.lotId, lotId), eq(order.orderType, "branch")))
+    .for("update");
+
+  if (!existing) {
+    throw new AppError("NOT_FOUND", {
+      message: "Branch order not found",
+    });
+  }
+
+  if (existing.status !== "pending") {
+    throw new AppError("BAD_REQUEST", {
+      message: `Branch order is already ${existing.status}`,
+    });
+  }
+
+  return existing;
+}
 
 export const ordersBranchService = {
   async list(
@@ -247,23 +278,7 @@ export const ordersBranchService = {
       // Locking the order row first is what keeps two HQ users approving the
       // same order from both passing the stock check and drawing the lots
       // down twice.
-      const [existing] = await tx
-        .select()
-        .from(order)
-        .where(and(eq(order.lotId, lotId), eq(order.orderType, "branch")))
-        .for("update");
-
-      if (!existing) {
-        throw new AppError("NOT_FOUND", {
-          message: "Branch order not found",
-        });
-      }
-
-      if (existing.status !== "pending") {
-        throw new AppError("BAD_REQUEST", {
-          message: `Branch order is already ${existing.status}`,
-        });
-      }
+      await lockPendingOrder(tx, lotId);
 
       const lines = await tx
         .select()
@@ -392,8 +407,34 @@ export const ordersBranchService = {
     });
   },
 
-  reject(): Promise<null> {
-    return Promise.resolve(null);
+  /**
+   * HQ turns a pending branch request down. Nothing has to be given back:
+   * the HQ lots are only drawn on at approve, so a request that never got
+   * there never held any stock.
+   */
+  async reject(lotId: number): Promise<OrdersBranchRejectResponse> {
+    return db.transaction(async (tx) => {
+      await lockPendingOrder(tx, lotId);
+
+      const [rejected] = await tx
+        .update(order)
+        .set({ status: "rejected" })
+        .where(eq(order.lotId, lotId))
+        .returning();
+
+      const branchOrderDetails = await tx
+        .select()
+        .from(branchOrderDetail)
+        .where(eq(branchOrderDetail.lotId, lotId));
+
+      return {
+        ...rejected,
+        items: branchOrderDetails.map((item) => {
+          const { lotId: _, ...branchOrderDetail } = item;
+          return branchOrderDetail;
+        }),
+      };
+    });
   },
 
   // TODO: once this deducts head_order_detail and increments branch stock
