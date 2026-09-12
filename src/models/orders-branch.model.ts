@@ -21,6 +21,14 @@ const BranchOrderView = t.Composite([
   t.Object({ items: t.Array(lineItemView) }),
 ]);
 
+/** The order row plus its line items - what create and approve both return. */
+const orderWithItems = t.Composite([
+  orderEntity,
+  t.Object({
+    items: t.Array(t.Omit(branchOrderDetailEntity, ["lotId"])),
+  }),
+]);
+
 export const OrdersBranchModel = {
   params: t.Object({ lotId: t.Numeric() }),
   createBody: t.Object({
@@ -39,12 +47,8 @@ export const OrdersBranchModel = {
       .Encode((items) => items),
   }),
   detail: BranchOrderView,
-  createResponse: t.Composite([
-    orderEntity,
-    t.Object({
-      items: t.Array(t.Omit(branchOrderDetailEntity, ["lotId"])),
-    }),
-  ]),
+  createResponse: orderWithItems,
+  approveResponse: orderWithItems,
 };
 
 export type OrdersBranchDetail = Static<typeof OrdersBranchModel.detail>;
@@ -53,4 +57,7 @@ export type OrdersBranchCreateBody = Static<
 >;
 export type OrdersBranchCreateResponse = Static<
   typeof OrdersBranchModel.createResponse
+>;
+export type OrdersBranchApproveResponse = Static<
+  typeof OrdersBranchModel.approveResponse
 >;

@@ -84,14 +84,17 @@ export const ordersBranchRoute = new Elysia({ prefix: "/orders/branch" })
   )
   .patch(
     "/:lotId/approve",
-    async () =>
-      successResponse({ result: await ordersBranchService.approve() }),
+    async ({ user, params: { lotId } }) =>
+      successResponse(await ordersBranchService.approve(lotId, user.id)),
     {
       auth: ["hq"],
       params: OrdersBranchModel.params,
       response: {
-        ...stubResponse,
+        200: tSuccessResponse(OrdersBranchModel.approveResponse),
+        400: tErrorResponse("BAD_REQUEST"),
+        404: tErrorResponse("NOT_FOUND"),
         409: tErrorResponse("INSUFFICIENT_STOCK"),
+        500: tErrorResponse("INTERNAL_SERVER_ERROR"),
       },
       detail: {
         summary: "Approve a branch order",
