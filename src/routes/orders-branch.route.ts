@@ -124,7 +124,7 @@ export const ordersBranchRoute = new Elysia({ prefix: "/orders/branch" })
       detail: {
         summary: "Approve a branch order",
         description:
-          "HQ approves a branch's pending request, fulfilling it - same actor relationship as US-2.1's HQ-approves-its-own-supplier-order. Without this step, a branch could request and self-confirm receipt with no HQ involvement at all. Rejects with INSUFFICIENT_STOCK if HQ can no longer cover the requested amount for any line item at approval time.",
+          "HQ approves a branch's pending request, fulfilling it - same actor relationship as US-2.1's HQ-approves-its-own-supplier-order. Without this step, a branch could request and self-confirm receipt with no HQ involvement at all. Rejects with INSUFFICIENT_STOCK if HQ can no longer cover the requested amount for any line item at approval time. If success, the service deducts the approved amount from the linked headOrderDetail lot(s) and copies quantity/expiry/price into branchOrderDetail, branch stock increments immediately.",
         tags: ["Orders Branch"],
       },
     },
@@ -160,7 +160,7 @@ export const ordersBranchRoute = new Elysia({ prefix: "/orders/branch" })
       detail: {
         summary: "Record stock received at a branch",
         description:
-          "Branch confirms receipt of an approved order; no body needed - the service deducts the approved amount from the linked headOrderDetail lot(s) and copies quantity/expiry/price into branchOrderDetail, branch stock increments immediately.",
+          "Branch confirms receipt of an approved order; no body needed - set status to completed, make noti in hq if amount of each product is below min_stock_hq and resolve noti in branch if amount of each product is greater than equal min_stock_branch",
         tags: ["Orders Branch"],
       },
     },
