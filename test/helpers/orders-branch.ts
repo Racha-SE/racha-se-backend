@@ -4,11 +4,13 @@ import {
   branch,
   branchOrderDetail,
   headOrderDetail,
+  notification,
   order,
   product,
   supplier,
   user,
 } from "@/db/schema";
+import { ordersBranchService } from "@/services/orders-branch.service";
 import { auth } from "@/utils";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -37,15 +39,43 @@ export interface HqLotInput {
   status?: "pending" | "approved" | "rejected";
 }
 
+export interface ProductInput {
+  costPrice?: number;
+  /** HQ's low-stock threshold — what an HQ min_stock alert is judged against */
+  minStockHq?: number;
+  /** the branch's low-stock threshold — what clears its min_stock alert */
+  minStockBranch?: number;
+}
+
+export interface MinStockNotificationInput {
+  pId: number;
+  /** omit (or null) for an HQ-scoped alert */
+  branchId?: number | null;
+  /** stock at the moment the alert was raised — a snapshot, not a live figure */
+  quantity?: number;
+}
+
 export interface OrdersBranchFixture {
   branchId: number;
   supplierId: number;
+  /** a second branch — proves one branch can't receive another's order */
+  otherBranchId: number;
   /** userType "branch" — the one allowed to POST /orders/branch */
   branchUser: TestUser;
+  /** userType "branch", but belongs to `otherBranchId` */
+  otherBranchUser: TestUser;
   /** userType "hq" — owns the HQ lots, and proves the route's 403 path */
   hqUser: TestUser;
-  createProduct(costPrice?: number): Promise<number>;
+  createProduct(input?: number | ProductInput): Promise<number>;
   createHqLot(input: HqLotInput): Promise<{ lotId: number }>;
+  /**
+   * Puts a branch order into the state receipt expects. `approve()` is still a
+   * stub, so the tests can't get there through the service.
+   */
+  approveBranchOrder(lotId: number): Promise<void>;
+  openMinStockNotification(
+    input: MinStockNotificationInput,
+  ): Promise<{ notificationId: number }>;
   cleanup(): Promise<void>;
 }
 
@@ -66,6 +96,15 @@ export async function setupOrdersBranchFixture(
       name: `${label} Branch`,
       address: "123 Test Road",
       phoneNumber: "0800000000",
+    })
+    .returning({ branchId: branch.branchId });
+
+  const [otherCreatedBranch] = await db
+    .insert(branch)
+    .values({
+      name: `${label} Other Branch`,
+      address: "456 Test Road",
+      phoneNumber: "0800000001",
     })
     .returning({ branchId: branch.branchId });
 
@@ -105,15 +144,26 @@ export async function setupOrdersBranchFixture(
   }
 
   const branchUser = await createUser("branch", createdBranch.branchId);
+  const otherBranchUser = await createUser(
+    "branch",
+    otherCreatedBranch.branchId,
+  );
   const hqUser = await createUser("hq", null);
 
   return {
     branchId: createdBranch.branchId,
+    otherBranchId: otherCreatedBranch.branchId,
     supplierId: createdSupplier.supplierId,
     branchUser,
+    otherBranchUser,
     hqUser,
 
-    async createProduct(costPrice = 0) {
+    async createProduct(input = 0) {
+      const {
+        costPrice = 0,
+        minStockHq = 0,
+        minStockBranch = 0,
+      } = typeof input === "number" ? { costPrice: input } : input;
       const suffix = crypto.randomUUID();
       const [created] = await db
         .insert(product)
@@ -121,6 +171,8 @@ export async function setupOrdersBranchFixture(
           name: `${label} Product ${suffix}`,
           barcode: suffix,
           costPrice,
+          minStockHq,
+          minStockBranch,
         })
         .returning({ pId: product.pId });
       productIds.push(created.pId);
@@ -155,6 +207,19 @@ export async function setupOrdersBranchFixture(
       return { lotId: createdOrder.lotId };
     },
 
+    async approveBranchOrder(lotId) {
+      await ordersBranchService.approve(lotId, hqUser.id);
+    },
+
+    async openMinStockNotification({ pId, branchId = null, quantity = 0 }) {
+      const [created] = await db
+        .insert(notification)
+        .values({ type: "min_stock", branchId, pId, quantity })
+        .returning({ notificationId: notification.notificationId });
+
+      return { notificationId: created.notificationId };
+    },
+
     async cleanup() {
       // Every order these tests touch is owned by one of the fixture users —
       // the HQ lots seeded above and the branch orders the code under test
@@ -183,6 +248,12 @@ export async function setupOrdersBranchFixture(
       await db.delete(user).where(inArray(user.id, userIds));
 
       if (productIds.length > 0) {
+        // both the alerts the tests seed and the ones receive raises hang off
+        // a fixture product, and they reference product/branch — so they have
+        // to go before either does.
+        await db
+          .delete(notification)
+          .where(inArray(notification.pId, productIds));
         await db.delete(product).where(inArray(product.pId, productIds));
       }
       await db
@@ -190,7 +261,12 @@ export async function setupOrdersBranchFixture(
         .where(eq(supplier.supplierId, createdSupplier.supplierId));
       await db
         .delete(branch)
-        .where(eq(branch.branchId, createdBranch.branchId));
+        .where(
+          inArray(branch.branchId, [
+            createdBranch.branchId,
+            otherCreatedBranch.branchId,
+          ]),
+        );
     },
   };
 }
