@@ -113,7 +113,7 @@ export const ordersBranchRoute = new Elysia({ prefix: "/orders/branch" })
     async () =>
       successResponse({ result: await ordersBranchService.approve() }),
     {
-      auth: ["hq"], // change later
+      auth: ["hq"],
       params: OrdersBranchModel.params,
       response: {
         ...stubResponse,
@@ -131,7 +131,7 @@ export const ordersBranchRoute = new Elysia({ prefix: "/orders/branch" })
     "/:lotId/reject",
     async () => successResponse({ result: await ordersBranchService.reject() }),
     {
-      auth: ["hq"], // change later
+      auth: ["hq"],
       params: OrdersBranchModel.params,
       response: stubResponse,
       detail: {

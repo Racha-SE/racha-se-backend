@@ -2,7 +2,6 @@ import { eq, inArray } from "drizzle-orm";
 import { db } from "@/db/client";
 import {
   branch,
-  branchOrderAllocation,
   branchOrderDetail,
   headOrderDetail,
   order,
@@ -168,17 +167,7 @@ export async function setupOrdersBranchFixture(
           .where(inArray(order.userId, userIds))
       ).map(({ lotId }) => lotId);
 
-      const bodIds = (
-        await db
-          .select({ bodId: branchOrderDetail.bodId })
-          .from(branchOrderDetail)
-          .where(inArray(branchOrderDetail.lotId, lotIds))
-      ).map(({ bodId }) => bodId);
-
       if (lotIds.length > 0) {
-        await db
-          .delete(branchOrderAllocation)
-          .where(inArray(branchOrderAllocation.bodId, bodIds));
         await db
           .delete(branchOrderDetail)
           .where(inArray(branchOrderDetail.lotId, lotIds));

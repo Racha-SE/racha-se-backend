@@ -29,7 +29,6 @@ const BranchOrderViewWithoutAvailableAmount = t.Composite([
 
 const LotDeduction = t.Object({
   hodId: t.Number(),
-  bodId: t.Number(),
   amount: t.Integer({ minimum: 1 }),
 });
 
