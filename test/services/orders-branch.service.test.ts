@@ -210,7 +210,8 @@ describe("ordersBranchService.create", () => {
       .where(eq(headOrderDetail.lotId, lotId));
 
     // requesting draws the lot down right away, so nobody else's order can
-    // see those 4 — branch_order_allocation is what puts them back on reject
+    // see those 4 (this moves to approve time — see the route's approve
+    // description)
     expect(lot.remain).toBe(6);
   });
 

@@ -21,9 +21,9 @@ const BranchOrderView = t.Composite([
   t.Object({ items: t.Array(lineItemView) }),
 ]);
 
+/** How much of one branch order line is drawn from one HQ lot. */
 const LotDeduction = t.Object({
   hodId: t.Number(),
-  bodId: t.Number(),
   amount: t.Integer({ minimum: 1 }),
 });
 

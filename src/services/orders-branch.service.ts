@@ -5,12 +5,7 @@ import type {
 } from "@/models/orders-branch.model";
 import { db } from "@/db/client";
 import { eq, inArray, sql } from "drizzle-orm";
-import {
-  branchOrderAllocation,
-  branchOrderDetail,
-  headOrderDetail,
-  order,
-} from "@/db/schema";
+import { branchOrderDetail, headOrderDetail, order } from "@/db/schema";
 import { AppError } from "@/utils/error";
 
 export const ordersBranchService = {
@@ -85,7 +80,7 @@ export const ordersBranchService = {
         })
         .returning();
 
-      const hodIdsMapping: Omit<LotDeduction, "bodId">[][] = [];
+      const hodIdsMapping: LotDeduction[][] = [];
 
       // Create new branch order details and update head order details
       const newBOD = items.items.map((item) => {
@@ -112,7 +107,7 @@ export const ordersBranchService = {
 
         const expiredDates: Date[] = [];
 
-        const hodIds: Omit<LotDeduction, "bodId">[] = [];
+        const hodIds: LotDeduction[] = [];
 
         product.headOrderDetails.forEach((hod) => {
           if (itemRemain <= 0) return;
@@ -155,26 +150,6 @@ export const ordersBranchService = {
         .insert(branchOrderDetail)
         .values(newBOD)
         .returning();
-
-      const bodIds = branchOrderDetails.map((bod) => bod.bodId);
-
-      //insert branch order allocations to link the branch order details with the head order details
-      const insertedBOAs: LotDeduction[] = hodIdsMapping.flatMap(
-        (hodIds, index) => {
-          const bodId = bodIds[index];
-          return hodIds.map((hod) => {
-            const insertedData = {
-              bodId,
-              ["hodId"]: hod.hodId,
-              ["amount"]: hod.amount,
-            };
-
-            return insertedData;
-          });
-        },
-      );
-
-      await tx.insert(branchOrderAllocation).values(insertedBOAs);
 
       return {
         ...newOrder,
