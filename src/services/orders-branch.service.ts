@@ -476,16 +476,15 @@ export const ordersBranchService = {
   // branch stock once its order is completed, the same way `create` only
   // draws from head_order_detail rows whose order is approved. It's also the
   // point HQ's post-deduction level is settled enough to raise an alert on.
-  receive(lotid: number, branchId?: number) {
-    if (!branchId) {
-      throw new AppError("BAD_REQUEST", {
-        message: "invalid branch user",
-      });
-    }
-
+  async receive(lotid: number, branchId?: number) {
     const now = new Date();
 
     return db.transaction(async (tx) => {
+      if (!branchId) {
+        throw new AppError("BAD_REQUEST", {
+          message: "invalid branch user",
+        });
+      }
       // Lock the order row (not the joined user row) so two concurrent
       // receives can't both read "approved" and complete it twice.
       const [branchOrder] = await tx
@@ -517,12 +516,6 @@ export const ordersBranchService = {
         .select({ pId: branchOrderDetail.pId })
         .from(branchOrderDetail)
         .where(eq(branchOrderDetail.lotId, lotid));
-
-      if (details.length === 0) {
-        throw new AppError("NOT_FOUND", {
-          message: "Branch order has no line items",
-        });
-      }
 
       const pIds = [...new Set(details.map((detail) => detail.pId))];
 
