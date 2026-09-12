@@ -60,7 +60,7 @@ export const inventoryService = {
     return nearExpiryItems;
   },
 
-// --- Branch Scope---
+  // --- Branch Scope---
   async getBranchStock(branchId: number) {
     const [foundBranch] = await db
       .select()
@@ -91,7 +91,7 @@ export const inventoryService = {
         branchOrderDetail.branchId,
         product.pId,
         product.name,
-        product.barcode
+        product.barcode,
       );
 
     return items;
