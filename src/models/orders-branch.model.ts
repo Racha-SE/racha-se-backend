@@ -21,12 +21,6 @@ const BranchOrderView = t.Composite([
   t.Object({ items: t.Array(lineItemView) }),
 ]);
 
-/** How much of one branch order line is drawn from one HQ lot. */
-const LotDeduction = t.Object({
-  hodId: t.Number(),
-  amount: t.Integer({ minimum: 1 }),
-});
-
 export const OrdersBranchModel = {
   params: t.Object({ lotId: t.Numeric() }),
   createBody: t.Object({
@@ -60,5 +54,3 @@ export type OrdersBranchCreateBody = Static<
 export type OrdersBranchCreateResponse = Static<
   typeof OrdersBranchModel.createResponse
 >;
-
-export type LotDeduction = Static<typeof LotDeduction>;

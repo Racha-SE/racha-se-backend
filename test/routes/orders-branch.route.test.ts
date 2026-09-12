@@ -76,12 +76,6 @@ afterAll(async () => {
 describe("POST /orders/branch", () => {
   test("returns the created order and its line items in a success envelope", async () => {
     const pId = await fixture.createProduct(15);
-    await fixture.createHqLot({
-      pId,
-      remain: 10,
-      expiredDate: daysFromNow(30),
-      basePrice: 40,
-    });
 
     const response = await postOrder(
       { items: [{ pId, amount: 4 }] },
@@ -104,9 +98,9 @@ describe("POST /orders/branch", () => {
       pId,
       branchId: fixture.branchId,
       amount: 4,
-      remain: 4,
+      remain: 0,
       costPrice: 15,
-      basePrice: 40,
+      basePrice: 0,
     });
   });
 
@@ -126,9 +120,10 @@ describe("POST /orders/branch", () => {
     expect(body.error.code).toBe("NOT_FOUND");
   });
 
-  test("returns 409 with an AppError envelope when HQ stock is short", async () => {
+  test("returns 200 for a request HQ stock is short of", async () => {
     const pId = await fixture.createProduct();
-    // only 2 left in the lot, so 3 is already short
+    // only 2 left in the lot, but the request still stands — HQ stock is
+    // checked when HQ approves, not here
     await fixture.createHqLot({
       pId,
       remain: 2,
@@ -139,11 +134,12 @@ describe("POST /orders/branch", () => {
       { items: [{ pId, amount: 3 }] },
       branchCookie,
     );
-    const body = (await response.json()) as ErrorBody;
+    const body =
+      (await response.json()) as SuccessBody<OrdersBranchCreateResponse>;
 
-    expect(response.status).toBe(409);
-    expect(body.success).toBe(false);
-    expect(body.error.code).toBe("INSUFFICIENT_STOCK");
+    expect(response.status).toBe(200);
+    expect(body.success).toBe(true);
+    expect(body.data.items[0].amount).toBe(3);
   });
 
   test("returns 400 with a normalized envelope for a body that fails schema validation", async () => {
@@ -157,11 +153,6 @@ describe("POST /orders/branch", () => {
 
   test("returns 401 without a session", async () => {
     const pId = await fixture.createProduct();
-    await fixture.createHqLot({
-      pId,
-      remain: 10,
-      expiredDate: daysFromNow(30),
-    });
 
     const response = await postOrder({ items: [{ pId, amount: 1 }] });
 
@@ -170,11 +161,6 @@ describe("POST /orders/branch", () => {
 
   test("returns 403 for a signed-in user that isn't a branch", async () => {
     const pId = await fixture.createProduct();
-    await fixture.createHqLot({
-      pId,
-      remain: 10,
-      expiredDate: daysFromNow(30),
-    });
 
     const response = await postOrder({ items: [{ pId, amount: 1 }] }, hqCookie);
 
