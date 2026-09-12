@@ -97,13 +97,12 @@ export const ordersBranchRoute = new Elysia({ prefix: "/orders/branch" })
         200: tSuccessResponse(OrdersBranchModel.createResponse),
         400: tErrorResponse("BAD_REQUEST"),
         404: tErrorResponse("NOT_FOUND"),
-        409: tErrorResponse("INSUFFICIENT_STOCK"),
         500: tErrorResponse("INTERNAL_SERVER_ERROR"),
       },
       detail: {
         summary: "Request a stock transfer from HQ",
         description:
-          "Branch requests stock from HQ - same actor pattern as US-2.1's HQ-creates-its-own-supplier-order (the receiving party creates the order, not the sender).",
+          "Branch requests stock from HQ - same actor pattern as US-2.1's HQ-creates-its-own-supplier-order (the receiving party creates the order, not the sender). Records the request only: HQ stock is neither checked nor reserved here, so a request for more than HQ holds is still accepted and fails at approval time instead.",
         tags: ["Orders Branch"],
       },
     },

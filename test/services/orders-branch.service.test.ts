@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { and, count, eq, inArray, max } from "drizzle-orm";
+import { and, count, eq, max } from "drizzle-orm";
 import { db } from "@/db/client";
 import {
   branchOrderDetail,
@@ -26,10 +26,6 @@ afterAll(async () => {
   await fixture.cleanup();
 });
 
-// ordersBranchService.create is still a stub returning `null` — this suite is
-// the spec it has to satisfy, so the result is read through the response type
-// the route already documents. Drop the assertion once create returns for
-// real and the types line up on their own.
 function createOrder(
   items: { pId: number; amount: number }[],
 ): Promise<OrdersBranchCreateResponse> {
@@ -65,8 +61,6 @@ async function countBranchOrders(): Promise<number> {
 describe("ordersBranchService.create", () => {
   test("creates a pending branch order and persists one line per requested item", async () => {
     const pId = await fixture.createProduct(15);
-    const expiredDate = daysFromNow(30);
-    await fixture.createHqLot({ pId, remain: 10, expiredDate, basePrice: 40 });
 
     const result = await createOrder([{ pId, amount: 4 }]);
 
@@ -79,11 +73,13 @@ describe("ordersBranchService.create", () => {
       pId,
       branchId: fixture.branchId,
       amount: 4,
-      // nothing's been drawn from the branch's own lot yet
-      remain: 4,
+      // a pending request is not branch stock, and the lot it will be filled
+      // from isn't picked yet, so remain/basePrice/expiredDate stay empty
+      remain: 0,
       costPrice: 15,
-      basePrice: 40,
+      basePrice: 0,
     });
+    expect(result.items[0].expiredDate).toBeNull();
     // createResponse omits lotId from the line items — it's already on the
     // order the items hang off.
     expect(result.items[0]).not.toHaveProperty("lotId");
@@ -98,23 +94,13 @@ describe("ordersBranchService.create", () => {
       pId,
       branchId: fixture.branchId,
       amount: 4,
-      remain: 4,
+      remain: 0,
     });
   });
 
   test("creates one line per requested product", async () => {
     const firstPId = await fixture.createProduct(10);
     const secondPId = await fixture.createProduct(20);
-    await fixture.createHqLot({
-      pId: firstPId,
-      remain: 5,
-      expiredDate: daysFromNow(30),
-    });
-    await fixture.createHqLot({
-      pId: secondPId,
-      remain: 5,
-      expiredDate: daysFromNow(30),
-    });
 
     const result = await createOrder([
       { pId: firstPId, amount: 2 },
@@ -132,69 +118,27 @@ describe("ordersBranchService.create", () => {
     });
   });
 
-  test("takes expiredDate and basePrice from the nearest-to-expiry approved lot", async () => {
+  test("records a request HQ cannot cover, stock permitting or not", async () => {
     const pId = await fixture.createProduct();
-    const nearest = daysFromNow(10);
-    // inserted newest-expiry first, so picking the right lot can't be an
-    // accident of insertion order
-    await fixture.createHqLot({
-      pId,
-      remain: 10,
-      expiredDate: daysFromNow(60),
-      basePrice: 55,
-    });
-    await fixture.createHqLot({
-      pId,
-      remain: 10,
-      expiredDate: nearest,
-      basePrice: 40,
-    });
+    // one lot holding 2, against a request for 30 — and the request stands:
+    // whether HQ can cover it is approve's call, not create's
+    await fixture.createHqLot({ pId, remain: 2, expiredDate: daysFromNow(30) });
 
-    const result = await createOrder([{ pId, amount: 2 }]);
+    const result = await createOrder([{ pId, amount: 30 }]);
 
-    expect(result.items[0].basePrice).toBe(40);
-    expect(result.items[0].expiredDate).toEqual(nearest);
+    expect(result.status).toBe("pending");
+    expect(result.items[0].amount).toBe(30);
   });
 
-  test("pools available stock across every eligible lot, staying one line", async () => {
+  test("records a request for a product HQ has no lot for at all", async () => {
     const pId = await fixture.createProduct();
-    const nearest = daysFromNow(10);
-    await fixture.createHqLot({
-      pId,
-      remain: 3,
-      expiredDate: nearest,
-      basePrice: 40,
-    });
-    await fixture.createHqLot({
-      pId,
-      remain: 10,
-      expiredDate: daysFromNow(60),
-      basePrice: 55,
-    });
-
-    // 5 outgrows the nearest lot's 3, so it has to reach into the second one
-    const result = await createOrder([{ pId, amount: 5 }]);
-
-    expect(result.items).toHaveLength(1);
-    expect(result.items[0]).toMatchObject({
-      amount: 5,
-      remain: 5,
-      basePrice: 40,
-    });
-    expect(result.items[0].expiredDate).toEqual(nearest);
-  });
-
-  test("accepts a request for exactly the total available stock", async () => {
-    const pId = await fixture.createProduct();
-    await fixture.createHqLot({ pId, remain: 2, expiredDate: daysFromNow(10) });
-    await fixture.createHqLot({ pId, remain: 3, expiredDate: daysFromNow(20) });
 
     const result = await createOrder([{ pId, amount: 5 }]);
 
     expect(result.items[0].amount).toBe(5);
   });
 
-  test("deducts headOrderDetail.remain", async () => {
+  test("leaves headOrderDetail.remain untouched", async () => {
     const pId = await fixture.createProduct();
     const { lotId } = await fixture.createHqLot({
       pId,
@@ -209,74 +153,9 @@ describe("ordersBranchService.create", () => {
       .from(headOrderDetail)
       .where(eq(headOrderDetail.lotId, lotId));
 
-    // requesting draws the lot down right away, so nobody else's order can
-    // see those 4 (this moves to approve time — see the route's approve
-    // description)
-    expect(lot.remain).toBe(6);
-  });
-
-  test("draws stock down lot by lot, nearest expiry first", async () => {
-    const pId = await fixture.createProduct();
-    const nearest = await fixture.createHqLot({
-      pId,
-      remain: 3,
-      expiredDate: daysFromNow(10),
-    });
-    const later = await fixture.createHqLot({
-      pId,
-      remain: 10,
-      expiredDate: daysFromNow(60),
-    });
-
-    // 5 outgrows the nearest lot's 3, so 2 have to come off the later one
-    await createOrder([{ pId, amount: 5 }]);
-
-    const lots = await db
-      .select()
-      .from(headOrderDetail)
-      .where(inArray(headOrderDetail.lotId, [nearest.lotId, later.lotId]));
-    const byLotId = new Map(lots.map((lot) => [lot.lotId, lot]));
-
-    expect(byLotId.get(nearest.lotId)).toMatchObject({ remain: 0 });
-    expect(byLotId.get(later.lotId)).toMatchObject({ remain: 8 });
-  });
-
-  test("ignores stock an earlier order already drew", async () => {
-    const pId = await fixture.createProduct();
-    await fixture.createHqLot({
-      pId,
-      remain: 10,
-      expiredDate: daysFromNow(30),
-    });
-
-    // an earlier branch order took 8 of the 10, so only 2 are left to draw
-    await createOrder([{ pId, amount: 8 }]);
-
-    const error = await expectAppError(createOrder([{ pId, amount: 3 }]));
-
-    expect(error.code).toBe("INSUFFICIENT_STOCK");
-  });
-
-  test("draws the last of a partly drawn lot", async () => {
-    const pId = await fixture.createProduct();
-    const { lotId } = await fixture.createHqLot({
-      pId,
-      remain: 10,
-      expiredDate: daysFromNow(30),
-    });
-
-    await createOrder([{ pId, amount: 8 }]);
-
-    const result = await createOrder([{ pId, amount: 2 }]);
-
-    expect(result.items[0].amount).toBe(2);
-
-    const [lot] = await db
-      .select()
-      .from(headOrderDetail)
-      .where(eq(headOrderDetail.lotId, lotId));
-
-    expect(lot.remain).toBe(0);
+    // nothing is reserved at request time — the lot is drawn down when HQ
+    // approves, which is also what lets approve report INSUFFICIENT_STOCK
+    expect(lot.remain).toBe(10);
   });
 
   test("throws AppError(NOT_FOUND) when a pId does not exist", async () => {
@@ -293,85 +172,43 @@ describe("ordersBranchService.create", () => {
     expect(error.httpStatus).toBe(404);
   });
 
-  test("throws AppError(INSUFFICIENT_STOCK) when every lot combined is short", async () => {
+  test("throws AppError(NOT_FOUND) for a deactivated product", async () => {
     const pId = await fixture.createProduct();
-    await fixture.createHqLot({ pId, remain: 2, expiredDate: daysFromNow(10) });
-    await fixture.createHqLot({ pId, remain: 3, expiredDate: daysFromNow(20) });
+    await db
+      .update(product)
+      .set({ isActive: false })
+      .where(eq(product.pId, pId));
 
-    const error = await expectAppError(createOrder([{ pId, amount: 6 }]));
+    const error = await expectAppError(createOrder([{ pId, amount: 1 }]));
 
-    expect(error.code).toBe("INSUFFICIENT_STOCK");
-    expect(error.httpStatus).toBe(409);
-  });
-
-  test("ignores lots whose order has not been approved", async () => {
-    const pId = await fixture.createProduct();
-    await fixture.createHqLot({ pId, remain: 2, expiredDate: daysFromNow(30) });
-    await fixture.createHqLot({
-      pId,
-      remain: 100,
-      expiredDate: daysFromNow(30),
-      status: "pending",
-    });
-    await fixture.createHqLot({
-      pId,
-      remain: 100,
-      expiredDate: daysFromNow(30),
-      status: "rejected",
-    });
-
-    // only the approved lot's 2 counts, so 3 can't be covered
-    const error = await expectAppError(createOrder([{ pId, amount: 3 }]));
-
-    expect(error.code).toBe("INSUFFICIENT_STOCK");
-  });
-
-  test("ignores lots that have already expired", async () => {
-    const pId = await fixture.createProduct();
-    await fixture.createHqLot({ pId, remain: 2, expiredDate: daysFromNow(30) });
-    await fixture.createHqLot({
-      pId,
-      remain: 100,
-      expiredDate: daysFromNow(-1),
-    });
-
-    const error = await expectAppError(createOrder([{ pId, amount: 3 }]));
-
-    expect(error.code).toBe("INSUFFICIENT_STOCK");
+    expect(error.code).toBe("NOT_FOUND");
   });
 
   test("writes no order at all when one item in the request fails", async () => {
     const coveredPId = await fixture.createProduct();
-    const shortPId = await fixture.createProduct();
-    const covered = await fixture.createHqLot({
-      pId: coveredPId,
-      remain: 10,
-      expiredDate: daysFromNow(30),
-    });
-    await fixture.createHqLot({
-      pId: shortPId,
-      remain: 1,
-      expiredDate: daysFromNow(30),
-    });
+    const [{ highest }] = await db
+      .select({ highest: max(product.pId) })
+      .from(product);
+    const missingPId = (highest ?? 0) + 1000;
 
     const ordersBefore = await countBranchOrders();
 
     await expectAppError(
       createOrder([
         { pId: coveredPId, amount: 1 },
-        { pId: shortPId, amount: 5 },
+        { pId: missingPId, amount: 5 },
       ]),
     );
 
     expect(await countBranchOrders()).toBe(ordersBefore);
 
-    // the covered item's deduction has to roll back with the order —
-    // otherwise a failed request quietly eats stock nobody ordered
-    const [coveredLot] = await db
+    // the good item's line has to roll back with the order — a rejected
+    // request must not leave half of itself behind
+    const orphaned = await db
       .select()
-      .from(headOrderDetail)
-      .where(eq(headOrderDetail.lotId, covered.lotId));
+      .from(branchOrderDetail)
+      .where(eq(branchOrderDetail.pId, coveredPId));
 
-    expect(coveredLot.remain).toBe(10);
+    expect(orphaned).toHaveLength(0);
   });
 });

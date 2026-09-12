@@ -104,5 +104,3 @@ export type OrdersBranchCreateBody = Static<
 export type OrdersBranchCreateResponse = Static<
   typeof OrdersBranchModel.createResponse
 >;
-
-export type LotDeduction = Static<typeof LotDeduction>;
