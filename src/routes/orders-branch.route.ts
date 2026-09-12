@@ -106,11 +106,17 @@ export const ordersBranchRoute = new Elysia({ prefix: "/orders/branch" })
   )
   .patch(
     "/:lotId/reject",
-    async () => successResponse({ result: await ordersBranchService.reject() }),
+    async ({ params: { lotId } }) =>
+      successResponse(await ordersBranchService.reject(lotId)),
     {
       auth: ["hq"],
       params: OrdersBranchModel.params,
-      response: stubResponse,
+      response: {
+        200: tSuccessResponse(OrdersBranchModel.rejectResponse),
+        400: tErrorResponse("BAD_REQUEST"),
+        404: tErrorResponse("NOT_FOUND"),
+        500: tErrorResponse("INTERNAL_SERVER_ERROR"),
+      },
       detail: {
         summary: "Reject a branch order",
         description: "HQ rejects a branch's pending request.",

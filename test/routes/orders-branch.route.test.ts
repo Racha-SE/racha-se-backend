@@ -6,6 +6,7 @@ import { order, product } from "@/db/schema";
 import type {
   OrdersBranchApproveResponse,
   OrdersBranchCreateResponse,
+  OrdersBranchRejectResponse,
 } from "@/models/orders-branch.model";
 import { errorHandler } from "@/plugins/error-handler";
 import { authRoute, ordersBranchRoute } from "@/routes";
@@ -69,6 +70,15 @@ function postOrder(body: unknown, cookie?: string): Promise<Response> {
 function patchApprove(lotId: number, cookie?: string): Promise<Response> {
   return app.handle(
     new Request(`http://localhost/orders/branch/${lotId}/approve`, {
+      method: "PATCH",
+      headers: { ...(cookie ? { Cookie: cookie } : {}) },
+    }),
+  );
+}
+
+function patchReject(lotId: number, cookie?: string): Promise<Response> {
+  return app.handle(
+    new Request(`http://localhost/orders/branch/${lotId}/reject`, {
       method: "PATCH",
       headers: { ...(cookie ? { Cookie: cookie } : {}) },
     }),
@@ -269,5 +279,61 @@ describe("PATCH /orders/branch/:lotId/approve", () => {
     const response = await patchApprove(lotId);
 
     expect(response.status).toBe(401);
+  });
+});
+
+describe("PATCH /orders/branch/:lotId/reject", () => {
+  test("returns the rejected order and its line items", async () => {
+    const pId = await fixture.createProduct(15);
+    await fixture.createHqLot({
+      pId,
+      remain: 10,
+      expiredDate: daysFromNow(30),
+    });
+    const lotId = await requestOrder(pId, 4);
+
+    const response = await patchReject(lotId, hqCookie);
+    const body =
+      (await response.json()) as SuccessBody<OrdersBranchRejectResponse>;
+
+    expect(response.status).toBe(200);
+    expect(body.success).toBe(true);
+    expect(body.data).toMatchObject({ lotId, status: "rejected" });
+    expect(body.data.items[0]).toMatchObject({ pId, amount: 4 });
+  });
+
+  test("returns 404 with an AppError envelope for an unknown lotId", async () => {
+    const [{ highest }] = await db
+      .select({ highest: max(order.lotId) })
+      .from(order);
+
+    const response = await patchReject((highest ?? 0) + 1000, hqCookie);
+    const body = (await response.json()) as ErrorBody;
+
+    expect(response.status).toBe(404);
+    expect(body.success).toBe(false);
+    expect(body.error.code).toBe("NOT_FOUND");
+  });
+
+  test("returns 400 with an AppError envelope when the order is not pending", async () => {
+    const pId = await fixture.createProduct();
+    const lotId = await requestOrder(pId, 1);
+    await patchReject(lotId, hqCookie);
+
+    const response = await patchReject(lotId, hqCookie);
+    const body = (await response.json()) as ErrorBody;
+
+    expect(response.status).toBe(400);
+    expect(body.success).toBe(false);
+    expect(body.error.code).toBe("BAD_REQUEST");
+  });
+
+  test("returns 403 for the branch that raised the order", async () => {
+    const pId = await fixture.createProduct();
+    const lotId = await requestOrder(pId, 1);
+
+    const response = await patchReject(lotId, branchCookie);
+
+    expect(response.status).toBe(403);
   });
 });

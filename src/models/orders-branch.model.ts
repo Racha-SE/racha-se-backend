@@ -21,7 +21,7 @@ const BranchOrderView = t.Composite([
   t.Object({ items: t.Array(lineItemView) }),
 ]);
 
-/** The order row plus its line items - what create and approve both return. */
+/** The order row plus its line items - what every write endpoint returns. */
 const orderWithItems = t.Composite([
   orderEntity,
   t.Object({
@@ -49,6 +49,7 @@ export const OrdersBranchModel = {
   detail: BranchOrderView,
   createResponse: orderWithItems,
   approveResponse: orderWithItems,
+  rejectResponse: orderWithItems,
 };
 
 export type OrdersBranchDetail = Static<typeof OrdersBranchModel.detail>;
@@ -60,4 +61,7 @@ export type OrdersBranchCreateResponse = Static<
 >;
 export type OrdersBranchApproveResponse = Static<
   typeof OrdersBranchModel.approveResponse
+>;
+export type OrdersBranchRejectResponse = Static<
+  typeof OrdersBranchModel.rejectResponse
 >;
