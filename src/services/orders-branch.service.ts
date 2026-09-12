@@ -1,4 +1,5 @@
 import type {
+  OrdersBranchApproveResponse,
   OrdersBranchCreateBody,
   OrdersBranchCreateResponse,
   OrdersBranchGetByLotIdResponse,
@@ -231,8 +232,164 @@ export const ordersBranchService = {
     });
   },
 
-  approve(): Promise<null> {
-    return Promise.resolve(null);
+  /**
+   * HQ fulfils a pending branch request: the lots that fill it are picked
+   * here, not when the branch asked, so a request HQ can no longer cover
+   * fails with INSUFFICIENT_STOCK at this point.
+   */
+  async approve(
+    lotId: number,
+    approverId: string,
+  ): Promise<OrdersBranchApproveResponse> {
+    const now = new Date();
+
+    return db.transaction(async (tx) => {
+      // Locking the order row first is what keeps two HQ users approving the
+      // same order from both passing the stock check and drawing the lots
+      // down twice.
+      const [existing] = await tx
+        .select()
+        .from(order)
+        .where(and(eq(order.lotId, lotId), eq(order.orderType, "branch")))
+        .for("update");
+
+      if (!existing) {
+        throw new AppError("NOT_FOUND", {
+          message: "Branch order not found",
+        });
+      }
+
+      if (existing.status !== "pending") {
+        throw new AppError("BAD_REQUEST", {
+          message: `Branch order is already ${existing.status}`,
+        });
+      }
+
+      const lines = await tx
+        .select()
+        .from(branchOrderDetail)
+        .where(eq(branchOrderDetail.lotId, lotId));
+
+      const pIds = lines.map((line) => line.pId);
+
+      //Lock for update
+      await tx
+        .select({ hodId: headOrderDetail.hodId })
+        .from(headOrderDetail)
+        .where(inArray(headOrderDetail.pId, pIds))
+        .orderBy(headOrderDetail.hodId)
+        .for("update");
+
+      // Query the head order details that can still fill these lines: an
+      // approved HQ order, not expired, stock left. Nearest expiry first, so
+      // the oldest stock leaves the warehouse first.
+      const products = await tx.query.product.findMany({
+        columns: {
+          pId: true,
+        },
+        where: (product, { inArray }) => inArray(product.pId, pIds),
+        with: {
+          headOrderDetails: {
+            where: (headOrderDetail, { and, gt, exists }) =>
+              and(
+                gt(headOrderDetail.expiredDate, now),
+                gt(headOrderDetail.remain, 0),
+                exists(
+                  tx
+                    .select({ lotId: order.lotId })
+                    .from(order)
+                    .where(
+                      and(
+                        eq(order.lotId, headOrderDetail.lotId),
+                        eq(order.orderType, "hq"),
+                        eq(order.status, "approved"),
+                      ),
+                    ),
+                ),
+              ),
+            orderBy: (headOrderDetail, { asc }) =>
+              asc(headOrderDetail.expiredDate),
+          },
+        },
+      });
+
+      const lotsByProduct = new Map(
+        products.map(({ pId, headOrderDetails }) => [pId, headOrderDetails]),
+      );
+
+      const deductions: { hodId: number; amount: number }[] = [];
+
+      // No two lines share a lot list - createBody rejects a repeated pId -
+      // so each line can draw against its product's lots on its own.
+      const filledLines = lines.map((line) => {
+        const lots = lotsByProduct.get(line.pId) ?? [];
+        const availableAmount = lots.reduce((sum, lot) => sum + lot.remain, 0);
+
+        if (availableAmount < line.amount) {
+          throw new AppError("INSUFFICIENT_STOCK", {
+            message: `Insufficient stock for product ${line.pId}`,
+            pId: line.pId,
+            requested: line.amount,
+            availableAmount,
+          });
+        }
+
+        let outstanding = line.amount;
+        const drawnFrom: typeof lots = [];
+
+        for (const lot of lots) {
+          if (outstanding <= 0) break;
+          const drawn = Math.min(lot.remain, outstanding);
+          outstanding -= drawn;
+          deductions.push({ hodId: lot.hodId, amount: drawn });
+          drawnFrom.push(lot);
+        }
+
+        return {
+          bodId: line.bodId,
+          // the line stays one row even when it spans lots, so the expiry and
+          // price it carries are the nearest-expiry lot's
+          remain: line.amount,
+          expiredDate: drawnFrom[0].expiredDate,
+          basePrice: drawnFrom[0].basePrice,
+        };
+      });
+
+      //update head order details to deduct the remaining stock based on the branch order details
+      await tx.execute(sql`
+        update ${headOrderDetail}
+        set ${sql.identifier("remain")} = ${headOrderDetail.remain} - v.deduct
+        from (values ${sql.join(
+          deductions.map(
+            ({ hodId, amount }) => sql`(${hodId}::int, ${amount}::int)`,
+          ),
+          sql`, `,
+        )}) as v(hod_id, deduct)
+        where ${headOrderDetail.hodId} = v.hod_id
+      `);
+
+      // update branch order details and push item in items
+      const items = [];
+      for (const { bodId, ...fill } of filledLines) {
+        const [updated] = await tx
+          .update(branchOrderDetail)
+          .set(fill)
+          .where(eq(branchOrderDetail.bodId, bodId))
+          .returning();
+
+        const { lotId: _, ...item } = updated;
+        items.push(item);
+      }
+
+      // set status to approved
+      const [approved] = await tx
+        .update(order)
+        .set({ status: "approved", approvedBy: approverId, approvedAt: now })
+        .where(eq(order.lotId, lotId))
+        .returning();
+
+      return { ...approved, items };
+    });
   },
 
   reject(): Promise<null> {

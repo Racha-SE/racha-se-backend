@@ -2,8 +2,11 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { Elysia } from "elysia";
 import { max } from "drizzle-orm";
 import { db } from "@/db/client";
-import { product } from "@/db/schema";
-import type { OrdersBranchCreateResponse } from "@/models/orders-branch.model";
+import { order, product } from "@/db/schema";
+import type {
+  OrdersBranchApproveResponse,
+  OrdersBranchCreateResponse,
+} from "@/models/orders-branch.model";
 import { errorHandler } from "@/plugins/error-handler";
 import { authRoute, ordersBranchRoute } from "@/routes";
 import {
@@ -61,6 +64,23 @@ function postOrder(body: unknown, cookie?: string): Promise<Response> {
       body: JSON.stringify(body),
     }),
   );
+}
+
+function patchApprove(lotId: number, cookie?: string): Promise<Response> {
+  return app.handle(
+    new Request(`http://localhost/orders/branch/${lotId}/approve`, {
+      method: "PATCH",
+      headers: { ...(cookie ? { Cookie: cookie } : {}) },
+    }),
+  );
+}
+
+async function requestOrder(pId: number, amount: number): Promise<number> {
+  const response = await postOrder({ items: [{ pId, amount }] }, branchCookie);
+  const body =
+    (await response.json()) as SuccessBody<OrdersBranchCreateResponse>;
+
+  return body.data.lotId;
 }
 
 beforeAll(async () => {
@@ -165,5 +185,89 @@ describe("POST /orders/branch", () => {
     const response = await postOrder({ items: [{ pId, amount: 1 }] }, hqCookie);
 
     expect(response.status).toBe(403);
+  });
+});
+
+describe("PATCH /orders/branch/:lotId/approve", () => {
+  test("returns the approved order and its filled line items", async () => {
+    const pId = await fixture.createProduct(15);
+    const expiredDate = daysFromNow(30);
+    await fixture.createHqLot({ pId, remain: 10, expiredDate, basePrice: 40 });
+    const lotId = await requestOrder(pId, 4);
+
+    const response = await patchApprove(lotId, hqCookie);
+    const body = (await response.json()) as SuccessBody<
+      // expiredDate/approvedAt arrive as ISO strings once serialized
+      OrdersBranchApproveResponse
+    >;
+
+    expect(response.status).toBe(200);
+    expect(body.success).toBe(true);
+    expect(body.data).toMatchObject({
+      lotId,
+      status: "approved",
+      approvedBy: fixture.hqUser.id,
+    });
+    expect(body.data.items[0]).toMatchObject({
+      pId,
+      amount: 4,
+      remain: 4,
+      basePrice: 40,
+    });
+  });
+
+  test("returns 404 with an AppError envelope for an unknown lotId", async () => {
+    const [{ highest }] = await db
+      .select({ highest: max(order.lotId) })
+      .from(order);
+
+    const response = await patchApprove((highest ?? 0) + 1000, hqCookie);
+    const body = (await response.json()) as ErrorBody;
+
+    expect(response.status).toBe(404);
+    expect(body.success).toBe(false);
+    expect(body.error.code).toBe("NOT_FOUND");
+  });
+
+  test("returns 409 with an AppError envelope when HQ stock is short", async () => {
+    const pId = await fixture.createProduct();
+    // 3 was fine to ask for; by approval time only 2 are left
+    await fixture.createHqLot({ pId, remain: 2, expiredDate: daysFromNow(30) });
+    const lotId = await requestOrder(pId, 3);
+
+    const response = await patchApprove(lotId, hqCookie);
+    const body = (await response.json()) as ErrorBody;
+
+    expect(response.status).toBe(409);
+    expect(body.success).toBe(false);
+    expect(body.error.code).toBe("INSUFFICIENT_STOCK");
+  });
+
+  test("returns 403 for the branch that raised the order", async () => {
+    const pId = await fixture.createProduct();
+    await fixture.createHqLot({
+      pId,
+      remain: 10,
+      expiredDate: daysFromNow(30),
+    });
+    const lotId = await requestOrder(pId, 1);
+
+    const response = await patchApprove(lotId, branchCookie);
+
+    expect(response.status).toBe(403);
+  });
+
+  test("returns 401 without a session", async () => {
+    const pId = await fixture.createProduct();
+    await fixture.createHqLot({
+      pId,
+      remain: 10,
+      expiredDate: daysFromNow(30),
+    });
+    const lotId = await requestOrder(pId, 1);
+
+    const response = await patchApprove(lotId);
+
+    expect(response.status).toBe(401);
   });
 });
