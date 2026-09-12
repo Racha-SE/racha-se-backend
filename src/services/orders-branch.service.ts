@@ -8,12 +8,14 @@ import type {
   OrdersBranchRejectResponse,
 } from "@/models/orders-branch.model";
 import { db } from "@/db/client";
-import { and, asc, count, desc, eq, gt, inArray, sql } from "drizzle-orm";
+import { and, asc, count, desc, eq, gt, inArray,isNull, or, sql } from "drizzle-orm";
 import {
   branch,
   branchOrderDetail,
   headOrderDetail,
+  notification,
   order,
+  product,
   user,
 } from "@/db/schema";
 import { AppError } from "@/utils/error";
@@ -462,8 +464,215 @@ export const ordersBranchService = {
   // received, and open/keep an HQ min_stock notification per product if the
   // HQ lot(s) remaining stock drops below product.minStockHq — see
   // notification.service.ts's top comment.
-  receive(lotid: number): Promise<null> {
-    console.log(lotid);
-    return Promise.resolve(null);
+  //
+  // The head_order_detail deduction the TODO above asks for already happens
+  // in `create`: picking the lots is what reserves them, so `remain` came
+  // down there, branch_order_allocation recorded which lots it came off, and
+  // quantity/expiry/price were copied into branch_order_detail at the same
+  // time. Nothing is left to move here.
+  //
+  // What receipt does is flip the order to "completed". That's the line
+  // between reserved and on hand - a branch_order_detail row only counts as
+  // branch stock once its order is completed, the same way `create` only
+  // draws from head_order_detail rows whose order is approved. It's also the
+  // point HQ's post-deduction level is settled enough to raise an alert on.
+  receive(lotid: number, branchId?: number) {
+    if (!branchId) {
+      throw new AppError("BAD_REQUEST", {
+        message: "invalid branch user",
+      });
+    }
+
+    const now = new Date();
+
+    return db.transaction(async (tx) => {
+      // Lock the order row (not the joined user row) so two concurrent
+      // receives can't both read "approved" and complete it twice.
+      const [branchOrder] = await tx
+        .select()
+        .from(order)
+        .innerJoin(user, eq(order.userId, user.id))
+        .where(and(eq(order.orderType, "branch"), eq(order.lotId, lotid)))
+        .for("update", { of: order });
+
+      if (!branchOrder) {
+        throw new AppError("NOT_FOUND", {
+          message: "Order Not Found",
+        });
+      }
+
+      if (branchOrder.user.branchId !== branchId) {
+        throw new AppError("FORBIDDEN", {
+          message: "not branch owner",
+        });
+      }
+
+      if (branchOrder.order.status !== "approved") {
+        throw new AppError("BAD_REQUEST", {
+          message: "branch order status must be approved",
+        });
+      }
+
+      const details = await tx
+        .select({ pId: branchOrderDetail.pId })
+        .from(branchOrderDetail)
+        .where(eq(branchOrderDetail.lotId, lotid));
+
+      if (details.length === 0) {
+        throw new AppError("NOT_FOUND", {
+          message: "Branch order has no line items",
+        });
+      }
+
+      const pIds = [...new Set(details.map((detail) => detail.pId))];
+
+      // Lock the products before touching notifications - two receives
+      // landing on the same product at once would otherwise both find no open
+      // HQ alert and both insert one.
+      await tx
+        .select({ pId: product.pId })
+        .from(product)
+        .where(inArray(product.pId, pIds))
+        .orderBy(product.pId)
+        .for("update");
+
+      await tx
+        .update(order)
+        .set({ status: "completed", receivedAt: now })
+        .where(eq(order.lotId, lotid));
+
+      // What this branch holds now that the order counts - the update above
+      // has to run first for these lines to be included. Unexpired only, the
+      // same way HQ stock is counted; branch_order_detail.expiredDate is
+      // nullable, and a line with no expiry never goes bad.
+      const branchStock = tx
+        .select({
+          pId: branchOrderDetail.pId,
+          remain:
+            sql<number>`coalesce(sum(${branchOrderDetail.remain}), 0)::int`.as(
+              "branch_remain",
+            ),
+        })
+        .from(branchOrderDetail)
+        .innerJoin(order, eq(order.lotId, branchOrderDetail.lotId))
+        .where(
+          and(
+            inArray(branchOrderDetail.pId, pIds),
+            eq(branchOrderDetail.branchId, branchId),
+            eq(order.status, "completed"),
+            or(
+              isNull(branchOrderDetail.expiredDate),
+              gt(branchOrderDetail.expiredDate, now),
+            ),
+          ),
+        )
+        .groupBy(branchOrderDetail.pId)
+        .as("branch_stock");
+
+      // HQ's side of the same move: what's left for these products after the
+      // deduction. Same definition of drawable as `create` uses - approved HQ
+      // lots that haven't expired - so this matches what a later branch
+      // request would actually be able to take.
+      const hqStock = tx
+        .select({
+          pId: headOrderDetail.pId,
+          remain:
+            sql<number>`coalesce(sum(${headOrderDetail.remain}), 0)::int`.as(
+              "hq_remain",
+            ),
+        })
+        .from(headOrderDetail)
+        .innerJoin(order, eq(order.lotId, headOrderDetail.lotId))
+        .where(
+          and(
+            inArray(headOrderDetail.pId, pIds),
+            eq(order.orderType, "hq"),
+            eq(order.status, "approved"),
+            gt(headOrderDetail.expiredDate, now),
+          ),
+        )
+        .groupBy(headOrderDetail.pId)
+        .as("hq_stock");
+
+      // Both minimums and both stock levels in one pass - the decisions below
+      // need all four per product. A product with nothing left on either side
+      // has no row in that subquery at all, hence the left joins and the null
+      // handling below. The two aggregates are aliased apart (branch_remain /
+      // hq_remain) because Postgres resolves them unqualified out here, and
+      // one shared name would be ambiguous across the two derived tables.
+      const levels = await tx
+        .select({
+          pId: product.pId,
+          minStockHq: product.minStockHq,
+          minStockBranch: product.minStockBranch,
+          branchRemain: branchStock.remain,
+          hqRemain: hqStock.remain,
+        })
+        .from(product)
+        .leftJoin(branchStock, eq(branchStock.pId, product.pId))
+        .leftJoin(hqStock, eq(hqStock.pId, product.pId))
+        .where(inArray(product.pId, pIds));
+
+      // Only clear a branch alert the delivery actually answered. A partial
+      // receipt that still leaves the product under its minimum keeps the
+      // alert open, otherwise it would close for good - a branch alert is
+      // only ever reopened by stock dropping below the minimum, and stock
+      // that never came back up can't drop below it again.
+      const resolvedPIds = levels
+        .filter(
+          ({ branchRemain, minStockBranch }) =>
+            (branchRemain ?? 0) >= minStockBranch,
+        )
+        .map(({ pId }) => pId);
+
+      if (resolvedPIds.length > 0) {
+        await tx
+          .update(notification)
+          .set({ isResolved: true, resolvedAt: now })
+          .where(
+            and(
+              eq(notification.type, "min_stock"),
+              eq(notification.branchId, branchId),
+              inArray(notification.pId, resolvedPIds),
+              eq(notification.isResolved, false),
+            ),
+          );
+      }
+
+      const openHqAlerts = new Set(
+        (
+          await tx
+            .select({ pId: notification.pId })
+            .from(notification)
+            .where(
+              and(
+                eq(notification.type, "min_stock"),
+                isNull(notification.branchId),
+                inArray(notification.pId, pIds),
+                eq(notification.isResolved, false),
+              ),
+            )
+        ).map(({ pId }) => pId),
+      );
+
+      // Keep an alert that's already open - its quantity is a snapshot from
+      // when it was raised, not a live figure - and open one where the
+      // product dropped below its HQ minimum with nothing open yet.
+      const newHqAlerts = levels
+        .filter(
+          ({ pId, hqRemain, minStockHq }) =>
+            !openHqAlerts.has(pId) && (hqRemain ?? 0) < minStockHq,
+        )
+        .map(({ pId, hqRemain }) => ({
+          type: "min_stock" as const,
+          branchId: null,
+          pId,
+          quantity: hqRemain ?? 0,
+        }));
+
+      if (newHqAlerts.length > 0) {
+        await tx.insert(notification).values(newHqAlerts);
+      }
+    });
   },
 };
