@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { Elysia } from "elysia";
-import { max } from "drizzle-orm";
+import { eq, max } from "drizzle-orm";
 import { db } from "@/db/client";
 import { order, product } from "@/db/schema";
 import type {
@@ -38,6 +38,7 @@ interface ErrorBody {
 
 let fixture: OrdersBranchFixture;
 let branchCookie: string;
+let otherBranchCookie: string;
 let hqCookie: string;
 
 async function signIn({ email, password }: TestUser): Promise<string> {
@@ -76,6 +77,15 @@ function patchApprove(lotId: number, cookie?: string): Promise<Response> {
   );
 }
 
+function patchReceive(lotId: number, cookie?: string): Promise<Response> {
+  return app.handle(
+    new Request(`http://localhost/orders/branch/${lotId}/receive`, {
+      method: "PATCH",
+      headers: cookie ? { Cookie: cookie } : {},
+    }),
+  );
+}
+
 function patchReject(lotId: number, cookie?: string): Promise<Response> {
   return app.handle(
     new Request(`http://localhost/orders/branch/${lotId}/reject`, {
@@ -96,6 +106,7 @@ async function requestOrder(pId: number, amount: number): Promise<number> {
 beforeAll(async () => {
   fixture = await setupOrdersBranchFixture("routebranchorder");
   branchCookie = await signIn(fixture.branchUser);
+  otherBranchCookie = await signIn(fixture.otherBranchUser);
   hqCookie = await signIn(fixture.hqUser);
 });
 
@@ -260,6 +271,7 @@ describe("PATCH /orders/branch/:lotId/approve", () => {
       remain: 10,
       expiredDate: daysFromNow(30),
     });
+
     const lotId = await requestOrder(pId, 1);
 
     const response = await patchApprove(lotId, branchCookie);
@@ -279,6 +291,103 @@ describe("PATCH /orders/branch/:lotId/approve", () => {
     const response = await patchApprove(lotId);
 
     expect(response.status).toBe(401);
+  });
+});
+
+describe("PATCH /orders/branch/:lotId/receive", () => {
+  /** an approved order waiting for the branch to sign for it */
+  async function approvedOrder(): Promise<number> {
+    const pId = await fixture.createProduct();
+    await fixture.createHqLot({
+      pId,
+      remain: 10,
+      expiredDate: daysFromNow(30),
+    });
+    const response = await postOrder(
+      { items: [{ pId, amount: 4 }] },
+      branchCookie,
+    );
+    const { data } =
+      (await response.json()) as SuccessBody<OrdersBranchCreateResponse>;
+    await fixture.approveBranchOrder(data.lotId);
+
+    return data.lotId;
+  }
+
+  test("confirms receipt and completes the order", async () => {
+    const lotId = await approvedOrder();
+
+    const response = await patchReceive(lotId, branchCookie);
+    const body = (await response.json()) as SuccessBody<{ message: string }>;
+
+    expect(response.status).toBe(200);
+    expect(body.success).toBe(true);
+    expect(body.data.message).toBe("branch order received");
+
+    const [received] = await db
+      .select()
+      .from(order)
+      .where(eq(order.lotId, lotId));
+    expect(received.status).toBe("completed");
+  });
+
+  test("returns 400 when the order hasn't been approved", async () => {
+    const pId = await fixture.createProduct();
+    await fixture.createHqLot({
+      pId,
+      remain: 10,
+      expiredDate: daysFromNow(30),
+    });
+    const created = await postOrder(
+      { items: [{ pId, amount: 4 }] },
+      branchCookie,
+    );
+    const { data } =
+      (await created.json()) as SuccessBody<OrdersBranchCreateResponse>;
+
+    const response = await patchReceive(data.lotId, branchCookie);
+    const body = (await response.json()) as ErrorBody;
+
+    expect(response.status).toBe(400);
+    expect(body.error.code).toBe("BAD_REQUEST");
+  });
+
+  test("returns 403 for a branch that doesn't own the order", async () => {
+    const lotId = await approvedOrder();
+
+    const response = await patchReceive(lotId, otherBranchCookie);
+    const body = (await response.json()) as ErrorBody;
+
+    expect(response.status).toBe(403);
+    expect(body.error.code).toBe("FORBIDDEN");
+  });
+
+  test("returns 404 for a lot that doesn't exist", async () => {
+    const [{ highest }] = await db
+      .select({ highest: max(order.lotId) })
+      .from(order);
+
+    const response = await patchReceive((highest ?? 0) + 1000, branchCookie);
+    const body = (await response.json()) as ErrorBody;
+
+    expect(response.status).toBe(404);
+    expect(body.error.code).toBe("NOT_FOUND");
+  });
+
+  test("returns 401 without a session", async () => {
+    const lotId = await approvedOrder();
+
+    const response = await patchReceive(lotId);
+
+    expect(response.status).toBe(401);
+  });
+
+  test("returns 403 for a signed-in user that isn't a branch", async () => {
+    const lotId = await approvedOrder();
+
+    const response = await patchReceive(lotId, hqCookie);
+
+    expect(response.status).toBe(403);
   });
 });
 
@@ -333,7 +442,6 @@ describe("PATCH /orders/branch/:lotId/reject", () => {
     const lotId = await requestOrder(pId, 1);
 
     const response = await patchReject(lotId, branchCookie);
-
     expect(response.status).toBe(403);
   });
 });
