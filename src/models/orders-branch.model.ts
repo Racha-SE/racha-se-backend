@@ -43,8 +43,8 @@ const BranchOrders = t.Composite([
     ),
   }),
   t.Object({
-    limit: t.Number(),
-    offset: t.Number(),
+    limit: t.Number({ minimum: 1 }),
+    offset: t.Number({ minimum: 0 }),
     totals: t.Number(),
   }),
 ]);
