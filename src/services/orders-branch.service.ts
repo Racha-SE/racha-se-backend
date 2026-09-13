@@ -17,7 +17,7 @@ import {
   user,
 } from "@/db/schema";
 import { AppError } from "@/utils/error";
-import { UserType } from "@/utils/types";
+import { UserType } from "@/utils/hierarchy";
 
 const DEFAULT_LIMIT = 10;
 
