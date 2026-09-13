@@ -22,51 +22,14 @@ async function requireProductById(id: number): Promise<Product> {
   return target;
 }
 
-function validateProductFields(
-  data: Partial<CreateProductBody | UpdateProductBody>,
-): void {
-  // 1. Numeric boundary validation
-  if (data.costPrice !== undefined && data.costPrice < 0) {
-    throw new AppError("BAD_REQUEST", {
-      reason: "costPrice cannot be negative",
-    });
-  }
-  if (data.minStockHq !== undefined && data.minStockHq < 0) {
-    throw new AppError("BAD_REQUEST", {
-      reason: "minStockHq cannot be negative",
-    });
-  }
-  if (data.minStockBranch !== undefined && data.minStockBranch < 0) {
-    throw new AppError("BAD_REQUEST", {
-      reason: "minStockBranch cannot be negative",
-    });
-  }
-
-  // 2. String empty/whitespace validation
-  if (data.name !== undefined && data.name.trim().length === 0) {
-    throw new AppError("BAD_REQUEST", {
-      reason: "Product name cannot be empty or whitespace",
-    });
-  }
-  if (data.barcode !== undefined && data.barcode.trim().length === 0) {
-    throw new AppError("BAD_REQUEST", {
-      reason: "Barcode cannot be empty or whitespace",
-    });
-  }
-}
-
+// Barcode is already trimmed and validated non-empty by ProductsModel's
+// createBody/updateBody schema before it reaches the service.
 async function assertBarcodeAvailable(
   barcode: string,
   excludeId?: number,
 ): Promise<void> {
-  const cleanBarcode = barcode.trim();
-
-  if (!cleanBarcode) {
-    throw new AppError("BAD_REQUEST", { reason: "Barcode cannot be empty" });
-  }
-
   const conditions = [
-    eq(product.barcode, cleanBarcode),
+    eq(product.barcode, barcode),
     excludeId ? not(eq(product.pId, excludeId)) : undefined,
   ].filter((c) => c !== undefined);
 
@@ -75,7 +38,7 @@ async function assertBarcodeAvailable(
     .from(product)
     .where(and(...conditions));
 
-  if (existing) throw new AppError("ALREADY_EXISTS", { barcode: cleanBarcode });
+  if (existing) throw new AppError("ALREADY_EXISTS", { barcode });
 }
 
 // assertBarcodeAvailable's check-then-insert has a TOCTOU gap under concurrent
@@ -132,9 +95,6 @@ export const productsService = {
   },
 
   async getById(actor: ScopedActor, id: number): Promise<Product> {
-    if (!id || id <= 0) {
-      throw new AppError("BAD_REQUEST", { reason: "Invalid product ID" });
-    }
     return await requireProductById(id);
   },
 
@@ -145,25 +105,14 @@ export const productsService = {
       });
     }
 
-    // Run input validation
-    validateProductFields(body);
-
-    const cleanBarcode = body.barcode.trim();
-    const cleanName = body.name.trim();
-
-    await assertBarcodeAvailable(cleanBarcode);
+    await assertBarcodeAvailable(body.barcode);
 
     const { categoryIds: _categoryIds, ...productData } = body;
     return await db.transaction(async (tx) => {
       try {
         const [newProduct] = await tx
           .insert(product)
-          .values({
-            ...productData,
-            name: cleanName,
-            barcode: cleanBarcode,
-            description: productData.description?.trim(),
-          })
+          .values(productData)
           .returning();
 
         // if (categoryIds && categoryIds.length > 0) {
@@ -175,7 +124,7 @@ export const productsService = {
         return newProduct;
       } catch (error) {
         if (isDuplicateBarcodeError(error)) {
-          throw new AppError("ALREADY_EXISTS", { barcode: cleanBarcode });
+          throw new AppError("ALREADY_EXISTS", { barcode: body.barcode });
         }
         throw error;
       }
@@ -193,21 +142,9 @@ export const productsService = {
       });
     }
 
-    if (!id || id <= 0) {
-      throw new AppError("BAD_REQUEST", { reason: "Invalid product ID" });
-    }
-
     const target = await requireProductById(id);
 
-    // Validate update fields if present
-    validateProductFields(body);
-
     const { categoryIds: _categoryIds, ...updateData } = body;
-    // Sanitize string fields
-    if (updateData.name) updateData.name = updateData.name.trim();
-    if (updateData.barcode) updateData.barcode = updateData.barcode.trim();
-    if (updateData.description)
-      updateData.description = updateData.description.trim();
 
     if (updateData.barcode && updateData.barcode !== target.barcode) {
       await assertBarcodeAvailable(updateData.barcode, id);
@@ -234,10 +171,6 @@ export const productsService = {
       throw new AppError("FORBIDDEN", {
         reason: "Only HQ can deactivate products",
       });
-    }
-
-    if (!id || id <= 0) {
-      throw new AppError("BAD_REQUEST", { reason: "Invalid product ID" });
     }
 
     const target = await requireProductById(id);

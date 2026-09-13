@@ -3,10 +3,10 @@ import { authPlugin } from "@/plugins/auth.plugin";
 import { ProductsModel } from "@/models/products.model";
 import { productsService } from "@/services/products.service";
 import {
-  type ScopedActor,
   type UserType,
   successResponse,
   tErrorResponse,
+  toActor,
   tSuccessResponse,
 } from "@/utils";
 
@@ -15,18 +15,6 @@ const READ_PRODUCT_TYPES: UserType[] = ["hq", "branch", "cashier"];
 
 // Only HQ managers can create, update, or deactivate products in the catalog.
 const MANAGE_PRODUCT_TYPES: UserType[] = ["hq"];
-
-function toActor(user: {
-  id: string;
-  userType: UserType;
-  branchId?: number | null;
-}): ScopedActor {
-  return {
-    id: user.id,
-    userType: user.userType,
-    branchId: user.branchId ?? null,
-  };
-}
 
 export const productsRoute = new Elysia({ prefix: "/products" })
   .use(authPlugin)
