@@ -39,7 +39,13 @@ export async function getAuthOpenAPIDocumentation(): Promise<
   const filteredPaths = Object.fromEntries(
     Object.entries(authSchema.paths)
       .filter(([path]) => EXPOSED_AUTH_PATHS.has(path))
-      .map(([path, pathItem]) => [path, retagPath(pathItem)]),
+      // better-auth's generator returns paths relative to its own routes
+      // (e.g. "/sign-in/email") and never applies the configured `basePath`,
+      // so the docs must be prefixed to match where auth.handler is actually mounted.
+      .map(([path, pathItem]) => [
+        `${auth.options.basePath}${path}`,
+        retagPath(pathItem),
+      ]),
   );
 
   return {
