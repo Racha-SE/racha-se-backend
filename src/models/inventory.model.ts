@@ -111,6 +111,8 @@ const HqInventoryItem = t.Object({
   pId: t.String(),
   productName: t.String(),
   productCategory: t.Array(t.String()),
+  description: t.String(),
+  barcode: t.String(),
   quantity: t.Integer(),
   price: t.Numeric(),
   expiredDate: t.String({ format: "date-time" }),

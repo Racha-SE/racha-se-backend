@@ -12,7 +12,7 @@ import {
   sql,
   sum,
   lte,
-  isNotNull
+  isNotNull,
   type SQL,
 } from "drizzle-orm";
 import { db } from "@/db/client";
@@ -139,6 +139,8 @@ export const inventoryService = {
       .select({
         pId: product.pId,
         productName: product.name,
+        description: product.description,
+        barcode: product.barcode,
         quantity: stock.quantity,
         price: nextLot.price,
         expiredDate: nextLot.expiredDate,
@@ -186,6 +188,8 @@ export const inventoryService = {
     return rows.map((row) => ({
       pId: String(row.pId),
       productName: row.productName,
+      description: row.description ?? "",
+      barcode: row.barcode,
       productCategory: categoriesByProduct.get(row.pId) ?? [],
       quantity: row.quantity,
       price: row.price,
