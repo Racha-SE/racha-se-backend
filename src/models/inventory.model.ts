@@ -1,7 +1,5 @@
 import { t, Static } from "elysia";
 import { tSuccessResponse, tErrorResponse } from "@/utils";
-import { productCategory } from "@/db/schema";
-import { createSelectSchema } from "drizzle-typebox";
 
 const productDetail = t.Object({
   pId: t.Number(),
@@ -77,8 +75,9 @@ export const branchNearExpiryResponse = {
   404: tErrorResponse("NOT_FOUND"),
 };
 
-const productCategorySchema = createSelectSchema(productCategory);
-
+// `as const` keeps the literals out of the `string` widening — without it
+// `Static<typeof productSortOptionEnum>` is just `string`, and the service
+// can't use the value to index its sort-column map.
 const productSortOption = [
   "pId",
   "name",
@@ -86,8 +85,8 @@ const productSortOption = [
   "quantity",
   "price",
   "expiredDate",
-];
-const productSortOrder = ["asc", "desc"];
+] as const;
+const productSortOrder = ["asc", "desc"] as const;
 
 const productSortOptionEnum = t.Union(
   productSortOption.map((option) => t.Literal(option)),
@@ -108,13 +107,18 @@ const HqInventoryQuery = t.Partial(
   }),
 );
 
-const HqInventoryResponse = t.Object({
+const HqInventoryItem = t.Object({
   pId: t.String(),
   productName: t.String(),
-  productCategory: t.Array(t.Pick(productCategorySchema, ["categoryName"])),
+  productCategory: t.Array(t.String()),
   quantity: t.Integer(),
   price: t.Numeric(),
   expiredDate: t.String({ format: "date-time" }),
+});
+
+// The route is a searchable, sortable, paged list — one item per product.
+const HqInventoryResponse = t.Object({
+  inventory: t.Array(HqInventoryItem),
 });
 
 export const InventoryModel = {
@@ -125,4 +129,4 @@ export const InventoryModel = {
 };
 
 export type HqInventoryQuery = Static<typeof HqInventoryQuery>;
-export type HqInventoryResponse = Static<typeof HqInventoryResponse>;
+export type HqInventoryItem = Static<typeof HqInventoryItem>;
