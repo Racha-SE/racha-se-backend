@@ -60,20 +60,9 @@ export const inventoryService = {
     return nearExpiryItems;
   },
 
-// --- Branch Scope---
+  // --- Branch Scope---
+
   async getBranchStock(branchId: number) {
-    const [foundBranch] = await db
-      .select()
-      .from(branch)
-      .where(eq(branch.branchId, branchId));
-
-    if (!foundBranch) {
-      throw new AppError("NOT_FOUND");
-    }
-    if (foundBranch.isActive === false) {
-      throw new AppError("FORBIDDEN");
-    }
-
     const items = await db
       .select({
         branchId: branchOrderDetail.branchId,
@@ -84,25 +73,15 @@ export const inventoryService = {
           barcode: product.barcode,
         },
       })
-      .from(branchOrderDetail)
+      .from(branchOrderDetail) 
       .innerJoin(product, eq(branchOrderDetail.pId, product.pId))
       .where(eq(branchOrderDetail.branchId, branchId))
-      .groupBy(
-        branchOrderDetail.branchId,
-        product.pId,
-        product.name,
-        product.barcode
-      );
+      .groupBy(branchOrderDetail.branchId, product.pId, product.name, product.barcode);
 
     return items;
   },
 
   async listBranchLowStock(branchId: number) {
-    const items = await this.getBranchStock(branchId);
-    return items.filter((item) => item.quantity <= 5);
-  },
-
-  async listBranchNearExpiry(branchId: number) {
     const [foundBranch] = await db
       .select()
       .from(branch)
@@ -115,8 +94,29 @@ export const inventoryService = {
       throw new AppError("FORBIDDEN");
     }
 
-    const daysToExpiry = 7;
+    const items = await this.getBranchStock(branchId);
 
+    return items.filter((item) => item.quantity <= 5);
+  },
+
+  async listBranchNearExpiry(branchId: number) {
+    // 1. ตรวจสอบสถานะสาขา
+    const [foundBranch] = await db
+      .select()
+      .from(branch)
+      .where(eq(branch.branchId, branchId));
+
+    if (!foundBranch) {
+      throw new AppError("NOT_FOUND");
+    }
+    if (foundBranch.isActive === false) {
+      throw new AppError("FORBIDDEN");
+    }
+
+    // 2. กำหนดระยะเวลาที่ถือว่าใกล้หมดอายุ (เช่น 7 วัน)
+    const daysToExpiry = 30;
+
+    // 3. ดึงข้อมูลจาก branchOrderDetail
     const nearExpiryItems = await db
       .select({
         branchId: branchOrderDetail.branchId,
