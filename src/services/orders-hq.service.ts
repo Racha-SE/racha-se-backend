@@ -15,14 +15,13 @@ export const ordersHqService = {
     const productIds = items.map((item) => item.pId);
 
     return db.transaction(async (tx) => {
-      const products = await tx.query.product.findMany({
-        where: (product, { inArray, and, eq }) =>
-          and(inArray(product.pId, productIds), eq(product.isActive, true)),
-      });
-
-      const suppliers = await tx
-        .select({ supplierId: supplier.supplierId })
-        .from(supplier);
+      const [products, suppliers] = await Promise.all([
+        tx.query.product.findMany({
+          where: (product, { inArray, and, eq }) =>
+            and(inArray(product.pId, productIds), eq(product.isActive, true)),
+        }),
+        tx.select({ supplierId: supplier.supplierId }).from(supplier),
+      ]);
 
       const mappedProducts = new Map(
         products.map((product) => [product.pId, product]),
