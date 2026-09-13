@@ -7,27 +7,13 @@ import {
 } from "@/db/schema";
 import { eq, sum, and, lte, isNotNull, sql } from "drizzle-orm";
 import { AppError } from "@/utils";
+import type { HqInventoryQuery } from "@/models/inventory.model";
+import { ScopedActor } from "@/utils";
 
 export const inventoryService = {
-  // --- HQ Scope ---
-  async getHqStock() {
-    const items = await db
-      .select({
-        pId: product.pId,
-        productName: product.name,
-        barcode: product.barcode,
-        totalQuantity: sum(headOrderDetail.remain).mapWith(Number),
-      })
-      .from(headOrderDetail)
-      .innerJoin(product, eq(headOrderDetail.pId, product.pId))
-      .groupBy(product.pId, product.name, product.barcode);
-
-    return items;
-  },
-
-  async listHqLowStock() {
-    const items = await this.getHqStock();
-    return items.filter((item) => item.totalQuantity <= 5);
+  getHqStock(user: ScopedActor, query: HqInventoryQuery): Promise<null> {
+    console.log(user, query);
+    return Promise.resolve(null);
   },
 
   async listHqNearExpiry() {
