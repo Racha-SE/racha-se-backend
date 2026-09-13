@@ -1,5 +1,5 @@
 import { Elysia } from "elysia";
-import type { UserType } from "@/utils/types";
+import type { UserType } from "@/utils/hierarchy";
 import { auth } from "@/utils";
 
 // .macro({ auth: {...} }) — routes opt in via `{ auth: true }` (any signed-in
