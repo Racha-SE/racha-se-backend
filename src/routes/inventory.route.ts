@@ -26,12 +26,15 @@ export const inventoryRoute = new Elysia({ prefix: "/inventory" })
     "/hq",
     async ({ user, query }) =>
       successResponse({
-        result: await inventoryService.getHqStock(toActor(user), query),
+        inventory: await inventoryService.getHqStock(toActor(user), query),
       }),
     {
       auth: ["hq"], // change later
       query: InventoryModel.getHqInventoryQuery,
-      response: stubResponse,
+      response: {
+        200: tSuccessResponse(InventoryModel.getHqInventoryResponse),
+        500: tErrorResponse("INTERNAL_SERVER_ERROR"),
+      },
       detail: {
         summary: "View a headquarter's real-time stock (searchable)",
         description: "Current stock on hand for a headquarter",
