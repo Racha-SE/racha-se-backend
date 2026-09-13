@@ -27,7 +27,6 @@ const BranchOrderViewWithoutAvailableAmount = t.Composite([
   t.Object({ items: t.Array(t.Omit(branchOrderDetailEntity, ["lotId"])) }),
 ]);
 
-
 const BranchOrders = t.Composite([
   t.Object({
     orders: t.Array(
