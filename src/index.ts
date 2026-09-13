@@ -22,7 +22,7 @@ import { getAuthOpenAPIDocumentation, verifyMailerConnection } from "@/utils";
 const authDocs = await getAuthOpenAPIDocumentation();
 await verifyMailerConnection();
 
-export const app = new Elysia()
+const app = new Elysia()
   .use(
     cors({
       origin: process.env.CORS_ORIGIN,
