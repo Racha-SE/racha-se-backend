@@ -20,9 +20,18 @@ export const NotificationModel = {
   alertListResult: t.Object({
     result: t.Array(alertEntry),
   }),
-  branchParams: t.Object({ branchId: t.String() }),
+  branchParams: t.Object({ branchId: t.Numeric({ minimum: 1 }) }),
+  scanResult: t.Object({
+    hqMinStockChecked: t.Number(),
+    branchMinStockChecked: t.Number(),
+    hqExpireOpened: t.Number(),
+    branchExpireOpened: t.Number(),
+  }),
 };
 
 export type NotificationAlertEntry = Static<
   typeof NotificationModel.alertEntry
+>;
+export type NotificationScanResult = Static<
+  typeof NotificationModel.scanResult
 >;

@@ -12,6 +12,7 @@ import {
   order,
 } from "@/db/schema";
 import { AppError } from "@/utils/error";
+import { notificationService } from "./notification.service";
 
 export const ordersBranchService = {
   list(): Promise<null> {
@@ -176,6 +177,16 @@ export const ordersBranchService = {
 
       await tx.insert(branchOrderAllocation).values(insertedBOAs);
 
+      // This order just deducted these products' HQ stock and added to this
+      // branch's — recheck both scopes' min_stock alerts in the same
+      // transaction as the stock change itself. pIds has no duplicates:
+      // OrdersBranchModel.createBody's items schema already rejects a
+      // repeated pId.
+      for (const pId of pIds) {
+        await notificationService.checkMinStock(tx, null, pId);
+        await notificationService.checkMinStock(tx, branchId, pId);
+      }
+
       return {
         ...newOrder,
         items: branchOrderDetails.map((item) => {
@@ -194,11 +205,10 @@ export const ordersBranchService = {
     return Promise.resolve(null);
   },
 
-  // TODO: once this deducts head_order_detail and increments branch stock
-  // for real, resolve the branch's min_stock notification for each product
-  // received, and open/keep an HQ min_stock notification per product if the
-  // HQ lot(s) remaining stock drops below product.minStockHq — see
-  // notification.service.ts's top comment.
+  // TODO: create() already rechecks HQ/branch min_stock the moment stock
+  // moves, so once this deducts head_order_detail and increments branch
+  // stock for real, it should call notificationService.checkMinStock the
+  // same way — see notification.service.ts's top comment.
   receive(): Promise<null> {
     return Promise.resolve(null);
   },

@@ -5,6 +5,7 @@ import {
   branchOrderAllocation,
   branchOrderDetail,
   headOrderDetail,
+  notification,
   order,
   product,
   supplier,
@@ -45,7 +46,10 @@ export interface OrdersBranchFixture {
   branchUser: TestUser;
   /** userType "hq" — owns the HQ lots, and proves the route's 403 path */
   hqUser: TestUser;
-  createProduct(costPrice?: number): Promise<number>;
+  createProduct(
+    costPrice?: number,
+    thresholds?: { minStockHq?: number; minStockBranch?: number },
+  ): Promise<number>;
   createHqLot(input: HqLotInput): Promise<{ lotId: number }>;
   cleanup(): Promise<void>;
 }
@@ -114,7 +118,7 @@ export async function setupOrdersBranchFixture(
     branchUser,
     hqUser,
 
-    async createProduct(costPrice = 0) {
+    async createProduct(costPrice = 0, thresholds = {}) {
       const suffix = crypto.randomUUID();
       const [created] = await db
         .insert(product)
@@ -122,6 +126,8 @@ export async function setupOrdersBranchFixture(
           name: `${label} Product ${suffix}`,
           barcode: suffix,
           costPrice,
+          minStockHq: thresholds.minStockHq ?? 0,
+          minStockBranch: thresholds.minStockBranch ?? 0,
         })
         .returning({ pId: product.pId });
       productIds.push(created.pId);
@@ -174,6 +180,15 @@ export async function setupOrdersBranchFixture(
           .from(branchOrderDetail)
           .where(inArray(branchOrderDetail.lotId, lotIds))
       ).map(({ bodId }) => bodId);
+
+      // notification rows (opened by checkMinStock/checkExpiringLots against
+      // these products' lots) reference product/order and have no cascade,
+      // so they have to go before either does.
+      if (productIds.length > 0) {
+        await db
+          .delete(notification)
+          .where(inArray(notification.pId, productIds));
+      }
 
       if (lotIds.length > 0) {
         await db
