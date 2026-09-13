@@ -23,7 +23,7 @@ export const product = pgTable("product", {
 
 export const productCategory = pgTable("product_category", {
   categoryId: serial("category_id").primaryKey(),
-  categoryName: varchar("category_name", { length: 255 }).notNull(),
+  categoryName: varchar("category_name", { length: 255 }).notNull().unique(),
   ...timestamps(),
 });
 

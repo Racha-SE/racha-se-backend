@@ -19,7 +19,6 @@ export const AppErrorCode = {
 export type AppErrorCode = keyof typeof AppErrorCode;
 /** Union of AppErrorCode HTTP status values. */
 export type AppErrorCodeHttpValue = (typeof AppErrorCode)[AppErrorCode];
-
 /**
  * Domain error thrown by services (and route guards). The global `onError`
  * handler in src/index.ts catches it and returns the standard

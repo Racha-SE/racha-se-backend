@@ -3,7 +3,7 @@ import { timestamps } from "./helpers";
 
 export const branch = pgTable("branch", {
   branchId: serial("branch_id").primaryKey(),
-  name: varchar("name", { length: 255 }).notNull(),
+  name: varchar("name", { length: 255 }).notNull().unique(),
   address: varchar("address", { length: 255 }).notNull(),
   phoneNumber: varchar("phone_number", { length: 255 }).notNull(),
   isActive: boolean("is_active").notNull().default(true),

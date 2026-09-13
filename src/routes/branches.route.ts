@@ -2,21 +2,21 @@ import { Elysia, t } from "elysia";
 import { authPlugin } from "@/plugins/auth.plugin";
 import { BranchesModel } from "@/models/branches.model";
 import { branchesService } from "@/services/branches.service";
-import { successResponse, tErrorResponse, tSuccessResponse } from "@/utils";
-
-const stubResponse = {
-  200: tSuccessResponse(t.Object({ result: t.Null() })),
-  500: tErrorResponse("INTERNAL_SERVER_ERROR"),
-};
+import { successResponse, tSuccessResponse, tErrorResponse } from "@/utils";
 
 export const branchesRoute = new Elysia({ prefix: "/branches" })
   .use(authPlugin)
+
   .get(
     "/",
     async () => successResponse({ result: await branchesService.list() }),
     {
-      auth: true, // change later
-      response: stubResponse,
+      auth: ["hq", "branch"],
+      response: {
+        200: tSuccessResponse(
+          t.Object({ result: t.Array(BranchesModel.entity) }),
+        ),
+      },
       detail: {
         summary: "List branches",
         description: "List all branches.",
@@ -24,13 +24,18 @@ export const branchesRoute = new Elysia({ prefix: "/branches" })
       },
     },
   )
+
   .get(
     "/:id",
-    async () => successResponse({ result: await branchesService.getById() }),
+    async ({ params: { id } }) =>
+      successResponse({ result: await branchesService.getById(id) }),
     {
-      auth: true, // change later
+      auth: ["hq", "branch"],
       params: BranchesModel.params,
-      response: stubResponse,
+      response: {
+        200: tSuccessResponse(t.Object({ result: BranchesModel.entity })),
+        404: tErrorResponse("NOT_FOUND"),
+      },
       detail: {
         summary: "Get a single branch",
         description: "View one branch's details.",
@@ -38,13 +43,18 @@ export const branchesRoute = new Elysia({ prefix: "/branches" })
       },
     },
   )
+
   .post(
     "/",
-    async () => successResponse({ result: await branchesService.create() }),
+    async ({ body }) =>
+      successResponse({ result: await branchesService.create(body) }),
     {
-      auth: true, // change later
+      auth: ["hq"],
       body: BranchesModel.createBody,
-      response: stubResponse,
+      response: {
+        200: tSuccessResponse(t.Object({ result: BranchesModel.entity })),
+        409: tErrorResponse("ALREADY_EXISTS"),
+      },
       detail: {
         summary: "Create a branch",
         description:
@@ -53,14 +63,20 @@ export const branchesRoute = new Elysia({ prefix: "/branches" })
       },
     },
   )
+
   .patch(
     "/:id",
-    async () => successResponse({ result: await branchesService.update() }),
+    async ({ params: { id }, body }) =>
+      successResponse({ result: await branchesService.update(id, body) }),
     {
-      auth: true, // change later
+      auth: ["hq"],
       params: BranchesModel.params,
       body: BranchesModel.updateBody,
-      response: stubResponse,
+      response: {
+        200: tSuccessResponse(t.Object({ result: BranchesModel.entity })),
+        404: tErrorResponse("NOT_FOUND"),
+        409: tErrorResponse("ALREADY_EXISTS"),
+      },
       detail: {
         summary: "Update a branch",
         description: "Edit an existing branch's details.",
@@ -68,16 +84,22 @@ export const branchesRoute = new Elysia({ prefix: "/branches" })
       },
     },
   )
+
   .delete(
     "/:id",
-    async () => successResponse({ result: await branchesService.deactivate() }),
+    async ({ params: { id } }) =>
+      successResponse({ result: await branchesService.deactivate(id) }), // หรือ remove(id) ตามชื่อใน Service คุณ
     {
-      auth: true, // change later
+      auth: ["hq"],
       params: BranchesModel.params,
-      response: stubResponse,
+      response: {
+        200: tSuccessResponse(t.Object({ result: BranchesModel.entity })),
+        404: tErrorResponse("NOT_FOUND"),
+        409: tErrorResponse("CATEGORY_IN_USE"),
+      },
       detail: {
         summary: "Deactivate a branch",
-        description: "Change isActive to false",
+        description: "Change isActive to false or delete branch",
         tags: ["Branches"],
       },
     },
