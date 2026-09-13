@@ -45,11 +45,18 @@ async function assertBarcodeAvailable(
 // requests; the DB's unique constraint on product.barcode is the actual
 // backstop. This turns that race's raw 23505 into the same ALREADY_EXISTS
 // shape the pre-check produces, instead of a bare 500.
+//
+// drizzle-orm's bun-sql adapter always wraps driver errors in its own
+// DrizzleQueryError, with the real SQL.PostgresError as `.cause` — check
+// that instead of `error` itself. And on SQL.PostgresError, the Postgres
+// SQLSTATE ("23505") is `.errno`; `.code` is Bun's own wrapper code
+// ("ERR_POSTGRES_SERVER_ERROR"), not the SQLSTATE.
 function isDuplicateBarcodeError(error: unknown): boolean {
+  const cause = error instanceof Error && error.cause ? error.cause : error;
   return (
-    error instanceof SQL.PostgresError &&
-    error.code === "23505" &&
-    error.constraint === "product_barcode_unique"
+    cause instanceof SQL.PostgresError &&
+    cause.errno === "23505" &&
+    cause.constraint === "product_barcode_unique"
   );
 }
 
