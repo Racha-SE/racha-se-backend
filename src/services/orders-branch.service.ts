@@ -11,6 +11,10 @@ import { AppError } from "@/utils/error";
 
 type Transaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
 
+function utcTimestamp(value: Date) {
+  return sql`${value.toISOString()}::timestamp`;
+}
+
 /**
  * Reads the branch order at `lotId` and holds it for the rest of the
  * transaction, so approve and reject can't both land on the same pending
@@ -238,17 +242,23 @@ export const ordersBranchService = {
       `);
 
       // update branch order details and push item in items
-      const items = [];
-      for (const { bodId, ...fill } of filledLines) {
-        const [updated] = await tx
-          .update(branchOrderDetail)
-          .set(fill)
-          .where(eq(branchOrderDetail.bodId, bodId))
-          .returning();
 
-        const { lotId: _, ...item } = updated;
-        items.push(item);
-      }
+      await tx.execute(sql`
+        update ${branchOrderDetail}
+        set ${sql.identifier("remain")} = v.remain,
+            ${sql.identifier("expired_date")} = v.expired_date,
+            ${sql.identifier("base_price")} = v.base_price,
+            ${sql.identifier("updated_at")} = ${utcTimestamp(now)}
+        from (values ${sql.join(
+          filledLines.map(
+            ({ bodId, remain, expiredDate, basePrice }) =>
+              sql`(${bodId}::int, ${remain}::int, ${utcTimestamp(expiredDate)}, ${basePrice}::int)`,
+          ),
+          sql`, `,
+        )})
+          as v(bod_id, remain, expired_date, base_price)
+          where ${branchOrderDetail.bodId} = v.bod_id
+        `);
 
       // set status to approved
       const [approved] = await tx
@@ -256,6 +266,16 @@ export const ordersBranchService = {
         .set({ status: "approved", approvedBy: approverId, approvedAt: now })
         .where(eq(order.lotId, lotId))
         .returning();
+
+      const items = (
+        await tx
+          .select()
+          .from(branchOrderDetail)
+          .where(eq(branchOrderDetail.lotId, lotId))
+      ).map((item) => {
+        const { lotId: _, ...updatedBranchOrderDetail } = item;
+        return updatedBranchOrderDetail;
+      });
 
       return { ...approved, items };
     });
