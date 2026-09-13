@@ -148,12 +148,8 @@
           "name": "user_branch_id_branch_branch_id_fk",
           "tableFrom": "user",
           "tableTo": "branch",
-          "columnsFrom": [
-            "branch_id"
-          ],
-          "columnsTo": [
-            "branch_id"
-          ],
+          "columnsFrom": ["branch_id"],
+          "columnsTo": ["branch_id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -163,16 +159,12 @@
         "user_email_unique": {
           "name": "user_email_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "email"
-          ]
+          "columns": ["email"]
         },
         "user_username_unique": {
           "name": "user_username_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "username"
-          ]
+          "columns": ["username"]
         }
       },
       "policies": {},
@@ -290,12 +282,8 @@
           "name": "account_user_id_user_user_id_fk",
           "tableFrom": "account",
           "tableTo": "user",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "user_id"
-          ],
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["user_id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -388,12 +376,8 @@
           "name": "session_user_id_user_user_id_fk",
           "tableFrom": "session",
           "tableTo": "user",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "user_id"
-          ],
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["user_id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -403,9 +387,7 @@
         "session_token_unique": {
           "name": "session_token_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "token"
-          ]
+          "columns": ["token"]
         }
       },
       "policies": {},
@@ -536,9 +518,7 @@
         "branch_name_unique": {
           "name": "branch_name_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "name"
-          ]
+          "columns": ["name"]
         }
       },
       "policies": {},
@@ -707,9 +687,7 @@
         "product_category_category_name_unique": {
           "name": "product_category_category_name_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "category_name"
-          ]
+          "columns": ["category_name"]
         }
       },
       "policies": {},
@@ -746,12 +724,8 @@
           "name": "product_category_map_p_id_product_p_id_fk",
           "tableFrom": "product_category_map",
           "tableTo": "product",
-          "columnsFrom": [
-            "p_id"
-          ],
-          "columnsTo": [
-            "p_id"
-          ],
+          "columnsFrom": ["p_id"],
+          "columnsTo": ["p_id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         },
@@ -759,12 +733,8 @@
           "name": "product_category_map_category_id_product_category_category_id_fk",
           "tableFrom": "product_category_map",
           "tableTo": "product_category",
-          "columnsFrom": [
-            "category_id"
-          ],
-          "columnsTo": [
-            "category_id"
-          ],
+          "columnsFrom": ["category_id"],
+          "columnsTo": ["category_id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -772,10 +742,7 @@
       "compositePrimaryKeys": {
         "product_category_map_p_id_category_id_pk": {
           "name": "product_category_map_p_id_category_id_pk",
-          "columns": [
-            "p_id",
-            "category_id"
-          ]
+          "columns": ["p_id", "category_id"]
         }
       },
       "uniqueConstraints": {},
@@ -880,12 +847,8 @@
           "name": "branch_order_detail_lot_id_order_lot_id_fk",
           "tableFrom": "branch_order_detail",
           "tableTo": "order",
-          "columnsFrom": [
-            "lot_id"
-          ],
-          "columnsTo": [
-            "lot_id"
-          ],
+          "columnsFrom": ["lot_id"],
+          "columnsTo": ["lot_id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         },
@@ -893,12 +856,8 @@
           "name": "branch_order_detail_branch_id_branch_branch_id_fk",
           "tableFrom": "branch_order_detail",
           "tableTo": "branch",
-          "columnsFrom": [
-            "branch_id"
-          ],
-          "columnsTo": [
-            "branch_id"
-          ],
+          "columnsFrom": ["branch_id"],
+          "columnsTo": ["branch_id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         },
@@ -906,12 +865,8 @@
           "name": "branch_order_detail_p_id_product_p_id_fk",
           "tableFrom": "branch_order_detail",
           "tableTo": "product",
-          "columnsFrom": [
-            "p_id"
-          ],
-          "columnsTo": [
-            "p_id"
-          ],
+          "columnsFrom": ["p_id"],
+          "columnsTo": ["p_id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -919,10 +874,7 @@
       "compositePrimaryKeys": {
         "branch_order_detail_lot_id_bod_id_pk": {
           "name": "branch_order_detail_lot_id_bod_id_pk",
-          "columns": [
-            "lot_id",
-            "bod_id"
-          ]
+          "columns": ["lot_id", "bod_id"]
         }
       },
       "uniqueConstraints": {},
@@ -1007,12 +959,8 @@
           "name": "customer_order_detail_lot_id_order_lot_id_fk",
           "tableFrom": "customer_order_detail",
           "tableTo": "order",
-          "columnsFrom": [
-            "lot_id"
-          ],
-          "columnsTo": [
-            "lot_id"
-          ],
+          "columnsFrom": ["lot_id"],
+          "columnsTo": ["lot_id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         },
@@ -1020,12 +968,8 @@
           "name": "customer_order_detail_branch_id_branch_branch_id_fk",
           "tableFrom": "customer_order_detail",
           "tableTo": "branch",
-          "columnsFrom": [
-            "branch_id"
-          ],
-          "columnsTo": [
-            "branch_id"
-          ],
+          "columnsFrom": ["branch_id"],
+          "columnsTo": ["branch_id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         },
@@ -1033,12 +977,8 @@
           "name": "customer_order_detail_p_id_product_p_id_fk",
           "tableFrom": "customer_order_detail",
           "tableTo": "product",
-          "columnsFrom": [
-            "p_id"
-          ],
-          "columnsTo": [
-            "p_id"
-          ],
+          "columnsFrom": ["p_id"],
+          "columnsTo": ["p_id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -1046,10 +986,7 @@
       "compositePrimaryKeys": {
         "customer_order_detail_lot_id_cod_id_pk": {
           "name": "customer_order_detail_lot_id_cod_id_pk",
-          "columns": [
-            "lot_id",
-            "cod_id"
-          ]
+          "columns": ["lot_id", "cod_id"]
         }
       },
       "uniqueConstraints": {},
@@ -1152,12 +1089,8 @@
           "name": "head_order_detail_lot_id_order_lot_id_fk",
           "tableFrom": "head_order_detail",
           "tableTo": "order",
-          "columnsFrom": [
-            "lot_id"
-          ],
-          "columnsTo": [
-            "lot_id"
-          ],
+          "columnsFrom": ["lot_id"],
+          "columnsTo": ["lot_id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         },
@@ -1165,12 +1098,8 @@
           "name": "head_order_detail_supplier_id_supplier_supplier_id_fk",
           "tableFrom": "head_order_detail",
           "tableTo": "supplier",
-          "columnsFrom": [
-            "supplier_id"
-          ],
-          "columnsTo": [
-            "supplier_id"
-          ],
+          "columnsFrom": ["supplier_id"],
+          "columnsTo": ["supplier_id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         },
@@ -1178,12 +1107,8 @@
           "name": "head_order_detail_p_id_product_p_id_fk",
           "tableFrom": "head_order_detail",
           "tableTo": "product",
-          "columnsFrom": [
-            "p_id"
-          ],
-          "columnsTo": [
-            "p_id"
-          ],
+          "columnsFrom": ["p_id"],
+          "columnsTo": ["p_id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -1191,10 +1116,7 @@
       "compositePrimaryKeys": {
         "head_order_detail_lot_id_hod_id_pk": {
           "name": "head_order_detail_lot_id_hod_id_pk",
-          "columns": [
-            "lot_id",
-            "hod_id"
-          ]
+          "columns": ["lot_id", "hod_id"]
         }
       },
       "uniqueConstraints": {},
@@ -1287,12 +1209,8 @@
           "name": "order_user_id_user_user_id_fk",
           "tableFrom": "order",
           "tableTo": "user",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "user_id"
-          ],
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["user_id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         },
@@ -1300,12 +1218,8 @@
           "name": "order_approved_by_user_user_id_fk",
           "tableFrom": "order",
           "tableTo": "user",
-          "columnsFrom": [
-            "approved_by"
-          ],
-          "columnsTo": [
-            "user_id"
-          ],
+          "columnsFrom": ["approved_by"],
+          "columnsTo": ["user_id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -1390,12 +1304,8 @@
           "name": "notification_branch_id_branch_branch_id_fk",
           "tableFrom": "notification",
           "tableTo": "branch",
-          "columnsFrom": [
-            "branch_id"
-          ],
-          "columnsTo": [
-            "branch_id"
-          ],
+          "columnsFrom": ["branch_id"],
+          "columnsTo": ["branch_id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         },
@@ -1403,12 +1313,8 @@
           "name": "notification_p_id_product_p_id_fk",
           "tableFrom": "notification",
           "tableTo": "product",
-          "columnsFrom": [
-            "p_id"
-          ],
-          "columnsTo": [
-            "p_id"
-          ],
+          "columnsFrom": ["p_id"],
+          "columnsTo": ["p_id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         },
@@ -1416,12 +1322,8 @@
           "name": "notification_lot_id_order_lot_id_fk",
           "tableFrom": "notification",
           "tableTo": "order",
-          "columnsFrom": [
-            "lot_id"
-          ],
-          "columnsTo": [
-            "lot_id"
-          ],
+          "columnsFrom": ["lot_id"],
+          "columnsTo": ["lot_id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -1446,39 +1348,22 @@
     "public.user_type": {
       "name": "user_type",
       "schema": "public",
-      "values": [
-        "hq",
-        "branch",
-        "cashier",
-        "customer"
-      ]
+      "values": ["hq", "branch", "cashier", "customer"]
     },
     "public.order_status": {
       "name": "order_status",
       "schema": "public",
-      "values": [
-        "pending",
-        "approved",
-        "rejected",
-        "completed"
-      ]
+      "values": ["pending", "approved", "rejected", "completed"]
     },
     "public.order_type": {
       "name": "order_type",
       "schema": "public",
-      "values": [
-        "hq",
-        "branch",
-        "customer"
-      ]
+      "values": ["hq", "branch", "customer"]
     },
     "public.notification_type": {
       "name": "notification_type",
       "schema": "public",
-      "values": [
-        "expire",
-        "min_stock"
-      ]
+      "values": ["expire", "min_stock"]
     }
   },
   "schemas": {},
