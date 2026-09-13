@@ -1,14 +1,22 @@
-import { Elysia } from "elysia";
+import { Elysia, t } from "elysia";
 import { authPlugin } from "@/plugins/auth.plugin";
 import {
   InventoryModel,
-  hqStockResponse,
   branchStockResponse,
-  hqNearExpiryResponse,
   branchNearExpiryResponse,
 } from "@/models/inventory.model";
 import { inventoryService } from "@/services/inventory.service";
-import { successResponse } from "@/utils";
+import {
+  successResponse,
+  tErrorResponse,
+  toActor,
+  tSuccessResponse,
+} from "@/utils";
+
+const stubResponse = {
+  200: tSuccessResponse(t.Object({ result: t.Null() })),
+  500: tErrorResponse("INTERNAL_SERVER_ERROR"),
+};
 
 export const inventoryRoute = new Elysia({ prefix: "/inventory" })
   .use(authPlugin)
@@ -16,35 +24,19 @@ export const inventoryRoute = new Elysia({ prefix: "/inventory" })
   // --- ฝั่ง HQ ---
   .get(
     "/hq",
-    async () =>
-      successResponse({ result: await inventoryService.getHqStock() }),
+    async ({ user, query }) =>
+      successResponse({
+        result: await inventoryService.getHqStock(toActor(user), query),
+      }),
     {
-      auth: true,
-      response: hqStockResponse,
-      detail: { summary: "View HQ real-time stock", tags: ["Inventory"] },
-    },
-  )
-  .get(
-    "/hq/low-stock",
-    async () =>
-      successResponse({ result: await inventoryService.listHqLowStock() }),
-    {
-      auth: true,
-      response: hqStockResponse,
+      auth: ["hq"], // change later
+      query: InventoryModel.getHqInventoryQuery,
+      response: stubResponse,
       detail: {
-        summary: "List HQ products below minimum stock",
+        summary: "View a headquarter's real-time stock (searchable)",
+        description: "Current stock on hand for a headquarter",
         tags: ["Inventory"],
       },
-    },
-  )
-  .get(
-    "/hq/near-expiry",
-    async () =>
-      successResponse({ result: await inventoryService.listHqNearExpiry() }),
-    {
-      auth: true,
-      response: hqNearExpiryResponse,
-      detail: { summary: "List HQ near-expiry items", tags: ["Inventory"] },
     },
   )
 
