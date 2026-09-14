@@ -68,10 +68,7 @@ export interface OrdersBranchFixture {
   hqUser: TestUser;
   createProduct(input?: number | ProductInput): Promise<number>;
   createHqLot(input: HqLotInput): Promise<{ lotId: number }>;
-  /**
-   * Puts a branch order into the state receipt expects. `approve()` is still a
-   * stub, so the tests can't get there through the service.
-   */
+  /** Approves a pending branch order directly through the service, as HQ. */
   approveBranchOrder(lotId: number): Promise<void>;
   openMinStockNotification(
     input: MinStockNotificationInput,
@@ -232,6 +229,15 @@ export async function setupOrdersBranchFixture(
           .where(inArray(order.userId, userIds))
       ).map(({ lotId }) => lotId);
 
+      // notification rows (opened by checkMinStock/checkExpiringLots against
+      // these products' lots) reference product/order and have no cascade,
+      // so they have to go before either does.
+      if (productIds.length > 0) {
+        await db
+          .delete(notification)
+          .where(inArray(notification.pId, productIds));
+      }
+
       if (lotIds.length > 0) {
         await db
           .delete(branchOrderDetail)
@@ -248,12 +254,6 @@ export async function setupOrdersBranchFixture(
       await db.delete(user).where(inArray(user.id, userIds));
 
       if (productIds.length > 0) {
-        // both the alerts the tests seed and the ones receive raises hang off
-        // a fixture product, and they reference product/branch — so they have
-        // to go before either does.
-        await db
-          .delete(notification)
-          .where(inArray(notification.pId, productIds));
         await db.delete(product).where(inArray(product.pId, productIds));
       }
       await db
