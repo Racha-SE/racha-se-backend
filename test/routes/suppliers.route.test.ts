@@ -63,7 +63,9 @@ function authHeaders(cookie: string): HeadersInit {
   return { Cookie: cookie, "Content-Type": "application/json" };
 }
 
-async function createSupplier(overrides: Record<string, unknown> = {}) {
+async function createSupplier(
+  overrides: Partial<typeof supplier.$inferInsert> = {},
+) {
   const [created] = await db
     .insert(supplier)
     .values({
@@ -140,6 +142,35 @@ describe("GET /suppliers", () => {
       created.supplierId,
     );
   });
+
+  test("returns suppliers sorted by name (hq)", async () => {
+    // Created in reverse order, so an insertion-ordered (unsorted) list would
+    // put "zzz" first. The prefixes sort the same under any collation, so the
+    // assertion doesn't depend on how the DB compares the uuid suffixes.
+    const last = await createSupplier({
+      name: `zzz Test Supplier ${crypto.randomUUID()}`,
+    });
+    const first = await createSupplier({
+      name: `aaa Test Supplier ${crypto.randomUUID()}`,
+    });
+
+    const response = await app.handle(
+      new Request("http://localhost/suppliers", {
+        headers: authHeaders(hqCookie),
+      }),
+    );
+    const body = (await response.json()) as SuccessBody<{
+      result: Supplier[];
+    }>;
+    const ids = body.data.result.map((s) => s.supplierId);
+
+    expect(response.status).toBe(200);
+    expect(ids).toContain(first.supplierId);
+    expect(ids).toContain(last.supplierId);
+    expect(ids.indexOf(first.supplierId)).toBeLessThan(
+      ids.indexOf(last.supplierId),
+    );
+  });
 });
 
 describe("GET /suppliers/:id", () => {
@@ -203,6 +234,18 @@ describe("GET /suppliers/:id", () => {
   test("returns 400 with a VALIDATION envelope for a non-numeric id", async () => {
     const response = await app.handle(
       new Request("http://localhost/suppliers/not-a-number", {
+        headers: authHeaders(hqCookie),
+      }),
+    );
+    const body = (await response.json()) as ErrorBody;
+
+    expect(response.status).toBe(400);
+    expect(body.error.code).toBe("VALIDATION");
+  });
+
+  test("returns 400 with a VALIDATION envelope for id 0 (below minimum)", async () => {
+    const response = await app.handle(
+      new Request("http://localhost/suppliers/0", {
         headers: authHeaders(hqCookie),
       }),
     );
