@@ -1,4 +1,4 @@
-import { Elysia, t } from "elysia";
+import { Elysia } from "elysia";
 import { authPlugin } from "@/plugins/auth.plugin";
 import { OrdersBranchModel } from "@/models/orders-branch.model";
 import { ordersBranchService } from "@/services/orders-branch.service";
@@ -8,11 +8,6 @@ import {
   tErrorResponse,
   tSuccessResponse,
 } from "@/utils";
-
-const stubResponse = {
-  200: tSuccessResponse(t.Object({ result: t.Null() })),
-  500: tErrorResponse("INTERNAL_SERVER_ERROR"),
-};
 
 export const ordersBranchRoute = new Elysia({ prefix: "/orders/branch" })
   .use(authPlugin)
