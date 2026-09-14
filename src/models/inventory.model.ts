@@ -7,22 +7,6 @@ const productDetail = t.Object({
   barcode: t.String(),
 });
 
-// สำหรับ GET /hq (รวมสต็อกปกติ และ Low Stock ของ HQ)
-export const hqStockResponse = {
-  200: tSuccessResponse(
-    t.Object({
-      result: t.Array(
-        t.Object({
-          pId: t.Number(),
-          productName: t.String(),
-          barcode: t.String(),
-          totalQuantity: t.Number(),
-        }),
-      ),
-    }),
-  ),
-};
-
 // สำหรับ GET /branches/:branchId (สต็อกปกติ และ Low Stock ของ Branch)
 export const branchStockResponse = {
   200: tSuccessResponse(
@@ -78,14 +62,7 @@ export const branchNearExpiryResponse = {
 // `as const` keeps the literals out of the `string` widening — without it
 // `Static<typeof productSortOptionEnum>` is just `string`, and the service
 // can't use the value to index its sort-column map.
-const productSortOption = [
-  "pId",
-  "name",
-  "categoryName",
-  "quantity",
-  "price",
-  "expiredDate",
-] as const;
+const productSortOption = ["quantity", "price", "expiredDate"] as const;
 const productSortOrder = ["asc", "desc"] as const;
 
 const productSortOptionEnum = t.Union(
@@ -104,11 +81,14 @@ const HqInventoryQuery = t.Partial(
     offset: t.Numeric({ minimum: 0 }),
     sortOption: productSortOptionEnum,
     sortOrder: productSortOrderEnum,
+    groupBy: t.Boolean({ default: false }),
   }),
 );
 
+// Ungrouped: one item per head_order_detail lot, so a product with several
+// lots on hand appears once per lot.
 const HqInventoryItem = t.Object({
-  pId: t.String(),
+  pId: t.Number(),
   productName: t.String(),
   productCategory: t.Array(t.String()),
   description: t.String(),
@@ -118,9 +98,31 @@ const HqInventoryItem = t.Object({
   expiredDate: t.String({ format: "date-time" }),
 });
 
-// The route is a searchable, sortable, paged list — one item per product.
+// Grouped: the same lots rolled up under their product.
+const HqInventoryGroupByProduct = t.Object({
+  pId: t.Number(),
+  productName: t.String(),
+  productCategory: t.Array(t.String()),
+  description: t.String(),
+  barcode: t.String(),
+  stocks: t.Array(
+    t.Object({
+      quantity: t.Integer(),
+      price: t.Numeric(),
+      expiredDate: t.String({ format: "date-time" }),
+    }),
+  ),
+});
+
+// The route is a searchable, sortable, paged list — grouped it pages over
+// products, ungrouped over lots. `totalCount` counts whatever the current mode
+// pages over, so it's a product count when grouped and a lot count when not.
 const HqInventoryResponse = t.Object({
-  inventory: t.Array(HqInventoryItem),
+  inventory: t.Union([
+    t.Array(HqInventoryItem),
+    t.Array(HqInventoryGroupByProduct),
+  ]),
+  totalCount: t.Integer(),
 });
 
 export const InventoryModel = {
@@ -132,3 +134,7 @@ export const InventoryModel = {
 
 export type HqInventoryQuery = Static<typeof HqInventoryQuery>;
 export type HqInventoryItem = Static<typeof HqInventoryItem>;
+export type HqInventoryGroupByProduct = Static<
+  typeof HqInventoryGroupByProduct
+>;
+export type HqInventoryResult = Static<typeof HqInventoryResponse>;

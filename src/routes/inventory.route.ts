@@ -20,9 +20,7 @@ export const inventoryRoute = new Elysia({ prefix: "/inventory" })
   .get(
     "/hq",
     async ({ user, query }) =>
-      successResponse({
-        inventory: await inventoryService.getHqStock(toActor(user), query),
-      }),
+      successResponse(await inventoryService.getHqStock(toActor(user), query)),
     {
       auth: ["hq"], // change later
       query: InventoryModel.getHqInventoryQuery,
