@@ -1,9 +1,13 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { Elysia } from "elysia";
-import { max } from "drizzle-orm";
+import { eq, max } from "drizzle-orm";
 import { db } from "@/db/client";
-import { product } from "@/db/schema";
-import type { OrdersBranchCreateResponse } from "@/models/orders-branch.model";
+import { order, product } from "@/db/schema";
+import type {
+  OrdersBranchApproveResponse,
+  OrdersBranchCreateResponse,
+  OrdersBranchRejectResponse,
+} from "@/models/orders-branch.model";
 import { errorHandler } from "@/plugins/error-handler";
 import { authRoute, ordersBranchRoute } from "@/routes";
 import {
@@ -34,6 +38,7 @@ interface ErrorBody {
 
 let fixture: OrdersBranchFixture;
 let branchCookie: string;
+let otherBranchCookie: string;
 let hqCookie: string;
 
 async function signIn({ email, password }: TestUser): Promise<string> {
@@ -63,9 +68,45 @@ function postOrder(body: unknown, cookie?: string): Promise<Response> {
   );
 }
 
+function patchApprove(lotId: number, cookie?: string): Promise<Response> {
+  return app.handle(
+    new Request(`http://localhost/orders/branch/${lotId}/approve`, {
+      method: "PATCH",
+      headers: { ...(cookie ? { Cookie: cookie } : {}) },
+    }),
+  );
+}
+
+function patchReceive(lotId: number, cookie?: string): Promise<Response> {
+  return app.handle(
+    new Request(`http://localhost/orders/branch/${lotId}/receive`, {
+      method: "PATCH",
+      headers: cookie ? { Cookie: cookie } : {},
+    }),
+  );
+}
+
+function patchReject(lotId: number, cookie?: string): Promise<Response> {
+  return app.handle(
+    new Request(`http://localhost/orders/branch/${lotId}/reject`, {
+      method: "PATCH",
+      headers: { ...(cookie ? { Cookie: cookie } : {}) },
+    }),
+  );
+}
+
+async function requestOrder(pId: number, amount: number): Promise<number> {
+  const response = await postOrder({ items: [{ pId, amount }] }, branchCookie);
+  const body =
+    (await response.json()) as SuccessBody<OrdersBranchCreateResponse>;
+
+  return body.data.lotId;
+}
+
 beforeAll(async () => {
   fixture = await setupOrdersBranchFixture("routebranchorder");
   branchCookie = await signIn(fixture.branchUser);
+  otherBranchCookie = await signIn(fixture.otherBranchUser);
   hqCookie = await signIn(fixture.hqUser);
 });
 
@@ -76,12 +117,6 @@ afterAll(async () => {
 describe("POST /orders/branch", () => {
   test("returns the created order and its line items in a success envelope", async () => {
     const pId = await fixture.createProduct(15);
-    await fixture.createHqLot({
-      pId,
-      remain: 10,
-      expiredDate: daysFromNow(30),
-      basePrice: 40,
-    });
 
     const response = await postOrder(
       { items: [{ pId, amount: 4 }] },
@@ -104,9 +139,9 @@ describe("POST /orders/branch", () => {
       pId,
       branchId: fixture.branchId,
       amount: 4,
-      remain: 4,
+      remain: 0,
       costPrice: 15,
-      basePrice: 40,
+      basePrice: 0,
     });
   });
 
@@ -126,9 +161,10 @@ describe("POST /orders/branch", () => {
     expect(body.error.code).toBe("NOT_FOUND");
   });
 
-  test("returns 409 with an AppError envelope when HQ stock is short", async () => {
+  test("returns 200 for a request HQ stock is short of", async () => {
     const pId = await fixture.createProduct();
-    // only 2 left in the lot, so 3 is already short
+    // only 2 left in the lot, but the request still stands — HQ stock is
+    // checked when HQ approves, not here
     await fixture.createHqLot({
       pId,
       remain: 2,
@@ -139,11 +175,12 @@ describe("POST /orders/branch", () => {
       { items: [{ pId, amount: 3 }] },
       branchCookie,
     );
-    const body = (await response.json()) as ErrorBody;
+    const body =
+      (await response.json()) as SuccessBody<OrdersBranchCreateResponse>;
 
-    expect(response.status).toBe(409);
-    expect(body.success).toBe(false);
-    expect(body.error.code).toBe("INSUFFICIENT_STOCK");
+    expect(response.status).toBe(200);
+    expect(body.success).toBe(true);
+    expect(body.data.items[0].amount).toBe(3);
   });
 
   test("returns 400 with a normalized envelope for a body that fails schema validation", async () => {
@@ -157,11 +194,6 @@ describe("POST /orders/branch", () => {
 
   test("returns 401 without a session", async () => {
     const pId = await fixture.createProduct();
-    await fixture.createHqLot({
-      pId,
-      remain: 10,
-      expiredDate: daysFromNow(30),
-    });
 
     const response = await postOrder({ items: [{ pId, amount: 1 }] });
 
@@ -170,14 +202,246 @@ describe("POST /orders/branch", () => {
 
   test("returns 403 for a signed-in user that isn't a branch", async () => {
     const pId = await fixture.createProduct();
+
+    const response = await postOrder({ items: [{ pId, amount: 1 }] }, hqCookie);
+
+    expect(response.status).toBe(403);
+  });
+});
+
+describe("PATCH /orders/branch/:lotId/approve", () => {
+  test("returns the approved order and its filled line items", async () => {
+    const pId = await fixture.createProduct(15);
+    const expiredDate = daysFromNow(30);
+    await fixture.createHqLot({ pId, remain: 10, expiredDate, basePrice: 40 });
+    const lotId = await requestOrder(pId, 4);
+
+    const response = await patchApprove(lotId, hqCookie);
+    const body = (await response.json()) as SuccessBody<
+      // expiredDate/approvedAt arrive as ISO strings once serialized
+      OrdersBranchApproveResponse
+    >;
+
+    expect(response.status).toBe(200);
+    expect(body.success).toBe(true);
+    expect(body.data).toMatchObject({
+      lotId,
+      status: "approved",
+      approvedBy: fixture.hqUser.id,
+    });
+    expect(body.data.items[0]).toMatchObject({
+      pId,
+      amount: 4,
+      remain: 4,
+      basePrice: 40,
+    });
+  });
+
+  test("returns 404 with an AppError envelope for an unknown lotId", async () => {
+    const [{ highest }] = await db
+      .select({ highest: max(order.lotId) })
+      .from(order);
+
+    const response = await patchApprove((highest ?? 0) + 1000, hqCookie);
+    const body = (await response.json()) as ErrorBody;
+
+    expect(response.status).toBe(404);
+    expect(body.success).toBe(false);
+    expect(body.error.code).toBe("NOT_FOUND");
+  });
+
+  test("returns 409 with an AppError envelope when HQ stock is short", async () => {
+    const pId = await fixture.createProduct();
+    // 3 was fine to ask for; by approval time only 2 are left
+    await fixture.createHqLot({ pId, remain: 2, expiredDate: daysFromNow(30) });
+    const lotId = await requestOrder(pId, 3);
+
+    const response = await patchApprove(lotId, hqCookie);
+    const body = (await response.json()) as ErrorBody;
+
+    expect(response.status).toBe(409);
+    expect(body.success).toBe(false);
+    expect(body.error.code).toBe("INSUFFICIENT_STOCK");
+  });
+
+  test("returns 403 for the branch that raised the order", async () => {
+    const pId = await fixture.createProduct();
     await fixture.createHqLot({
       pId,
       remain: 10,
       expiredDate: daysFromNow(30),
     });
 
-    const response = await postOrder({ items: [{ pId, amount: 1 }] }, hqCookie);
+    const lotId = await requestOrder(pId, 1);
 
+    const response = await patchApprove(lotId, branchCookie);
+
+    expect(response.status).toBe(403);
+  });
+
+  test("returns 401 without a session", async () => {
+    const pId = await fixture.createProduct();
+    await fixture.createHqLot({
+      pId,
+      remain: 10,
+      expiredDate: daysFromNow(30),
+    });
+    const lotId = await requestOrder(pId, 1);
+
+    const response = await patchApprove(lotId);
+
+    expect(response.status).toBe(401);
+  });
+});
+
+describe("PATCH /orders/branch/:lotId/receive", () => {
+  /** an approved order waiting for the branch to sign for it */
+  async function approvedOrder(): Promise<number> {
+    const pId = await fixture.createProduct();
+    await fixture.createHqLot({
+      pId,
+      remain: 10,
+      expiredDate: daysFromNow(30),
+    });
+    const response = await postOrder(
+      { items: [{ pId, amount: 4 }] },
+      branchCookie,
+    );
+    const { data } =
+      (await response.json()) as SuccessBody<OrdersBranchCreateResponse>;
+    await fixture.approveBranchOrder(data.lotId);
+
+    return data.lotId;
+  }
+
+  test("confirms receipt and completes the order", async () => {
+    const lotId = await approvedOrder();
+
+    const response = await patchReceive(lotId, branchCookie);
+    const body = (await response.json()) as SuccessBody<{ message: string }>;
+
+    expect(response.status).toBe(200);
+    expect(body.success).toBe(true);
+    expect(body.data.message).toBe("branch order received");
+
+    const [received] = await db
+      .select()
+      .from(order)
+      .where(eq(order.lotId, lotId));
+    expect(received.status).toBe("completed");
+  });
+
+  test("returns 400 when the order hasn't been approved", async () => {
+    const pId = await fixture.createProduct();
+    await fixture.createHqLot({
+      pId,
+      remain: 10,
+      expiredDate: daysFromNow(30),
+    });
+    const created = await postOrder(
+      { items: [{ pId, amount: 4 }] },
+      branchCookie,
+    );
+    const { data } =
+      (await created.json()) as SuccessBody<OrdersBranchCreateResponse>;
+
+    const response = await patchReceive(data.lotId, branchCookie);
+    const body = (await response.json()) as ErrorBody;
+
+    expect(response.status).toBe(400);
+    expect(body.error.code).toBe("BAD_REQUEST");
+  });
+
+  test("returns 403 for a branch that doesn't own the order", async () => {
+    const lotId = await approvedOrder();
+
+    const response = await patchReceive(lotId, otherBranchCookie);
+    const body = (await response.json()) as ErrorBody;
+
+    expect(response.status).toBe(403);
+    expect(body.error.code).toBe("FORBIDDEN");
+  });
+
+  test("returns 404 for a lot that doesn't exist", async () => {
+    const [{ highest }] = await db
+      .select({ highest: max(order.lotId) })
+      .from(order);
+
+    const response = await patchReceive((highest ?? 0) + 1000, branchCookie);
+    const body = (await response.json()) as ErrorBody;
+
+    expect(response.status).toBe(404);
+    expect(body.error.code).toBe("NOT_FOUND");
+  });
+
+  test("returns 401 without a session", async () => {
+    const lotId = await approvedOrder();
+
+    const response = await patchReceive(lotId);
+
+    expect(response.status).toBe(401);
+  });
+
+  test("returns 403 for a signed-in user that isn't a branch", async () => {
+    const lotId = await approvedOrder();
+
+    const response = await patchReceive(lotId, hqCookie);
+
+    expect(response.status).toBe(403);
+  });
+});
+
+describe("PATCH /orders/branch/:lotId/reject", () => {
+  test("returns the rejected order and its line items", async () => {
+    const pId = await fixture.createProduct(15);
+    await fixture.createHqLot({
+      pId,
+      remain: 10,
+      expiredDate: daysFromNow(30),
+    });
+    const lotId = await requestOrder(pId, 4);
+
+    const response = await patchReject(lotId, hqCookie);
+    const body =
+      (await response.json()) as SuccessBody<OrdersBranchRejectResponse>;
+
+    expect(response.status).toBe(200);
+    expect(body.success).toBe(true);
+    expect(body.data).toMatchObject({ lotId, status: "rejected" });
+    expect(body.data.items[0]).toMatchObject({ pId, amount: 4 });
+  });
+
+  test("returns 404 with an AppError envelope for an unknown lotId", async () => {
+    const [{ highest }] = await db
+      .select({ highest: max(order.lotId) })
+      .from(order);
+
+    const response = await patchReject((highest ?? 0) + 1000, hqCookie);
+    const body = (await response.json()) as ErrorBody;
+
+    expect(response.status).toBe(404);
+    expect(body.success).toBe(false);
+    expect(body.error.code).toBe("NOT_FOUND");
+  });
+
+  test("returns 400 with an AppError envelope when the order is not pending", async () => {
+    const pId = await fixture.createProduct();
+    const lotId = await requestOrder(pId, 1);
+    await patchReject(lotId, hqCookie);
+
+    const response = await patchReject(lotId, hqCookie);
+    const body = (await response.json()) as ErrorBody;
+
+    expect(response.status).toBe(400);
+    expect(body.success).toBe(false);
+    expect(body.error.code).toBe("BAD_REQUEST");
+  });
+
+  test("returns 403 for the branch that raised the order", async () => {
+    const pId = await fixture.createProduct();
+    const lotId = await requestOrder(pId, 1);
+
+    const response = await patchReject(lotId, branchCookie);
     expect(response.status).toBe(403);
   });
 });

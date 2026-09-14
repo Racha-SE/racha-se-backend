@@ -102,7 +102,7 @@ afterAll(async () => {
 // are low in stock or approaching their expiration date.
 describe("US-2.9: HQ inventory alerts", () => {
   test("a min_stock alert appears once a branch order draws HQ stock below the product's configured minStockHq", async () => {
-    const pId = await fixture.createProduct(0, { minStockHq: 5 });
+    const pId = await fixture.createProduct({ minStockHq: 5 });
     await fixture.createHqLot({
       pId,
       remain: 10,
@@ -136,7 +136,7 @@ describe("US-2.9: HQ inventory alerts", () => {
   });
 
   test("the min_stock alert clears once stock is back at/above the threshold", async () => {
-    const pId = await fixture.createProduct(0, { minStockHq: 5 });
+    const pId = await fixture.createProduct({ minStockHq: 5 });
     const lot = await fixture.createHqLot({
       pId,
       remain: 10,
@@ -218,7 +218,7 @@ describe("US-2.9: HQ inventory alerts", () => {
 // manage clearance sales.
 describe("US-3.5: branch inventory alerts", () => {
   test("a min_stock alert appears once the branch's incoming stock is still under the product's configured minStockBranch", async () => {
-    const pId = await fixture.createProduct(0, { minStockBranch: 10 });
+    const pId = await fixture.createProduct({ minStockBranch: 10 });
     await fixture.createHqLot({
       pId,
       remain: 50,

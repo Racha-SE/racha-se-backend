@@ -27,12 +27,6 @@ const BranchOrderViewWithoutAvailableAmount = t.Composite([
   t.Object({ items: t.Array(t.Omit(branchOrderDetailEntity, ["lotId"])) }),
 ]);
 
-const LotDeduction = t.Object({
-  hodId: t.Number(),
-  bodId: t.Number(),
-  amount: t.Integer({ minimum: 1 }),
-});
-
 const BranchOrders = t.Composite([
   t.Object({
     orders: t.Array(
@@ -62,6 +56,14 @@ const GetBranchOrdersQuery = t.Partial(
   }),
 );
 
+/** The order row plus its line items - what create and approve both return. */
+const orderWithItems = t.Composite([
+  orderEntity,
+  t.Object({
+    items: t.Array(t.Omit(branchOrderDetailEntity, ["lotId"])),
+  }),
+]);
+
 export const OrdersBranchModel = {
   params: t.Object({ lotId: t.Numeric() }),
   getBranchOrdersQuery: GetBranchOrdersQuery,
@@ -82,12 +84,13 @@ export const OrdersBranchModel = {
   }),
   getBranchOrders: BranchOrders,
   getBranchOrderByLotId: BranchOrderView,
-  createResponse: t.Composite([
-    orderEntity,
-    t.Object({
-      items: t.Array(t.Omit(branchOrderDetailEntity, ["lotId"])),
-    }),
-  ]),
+  detail: BranchOrderView,
+  createResponse: orderWithItems,
+  approveResponse: orderWithItems,
+  rejectResponse: orderWithItems,
+  receiveResponse: t.Object({
+    message: t.String(),
+  }),
 };
 
 export type OrdersBranchQuery = Static<
@@ -105,5 +108,9 @@ export type OrdersBranchCreateBody = Static<
 export type OrdersBranchCreateResponse = Static<
   typeof OrdersBranchModel.createResponse
 >;
-
-export type LotDeduction = Static<typeof LotDeduction>;
+export type OrdersBranchApproveResponse = Static<
+  typeof OrdersBranchModel.approveResponse
+>;
+export type OrdersBranchRejectResponse = Static<
+  typeof OrdersBranchModel.rejectResponse
+>;

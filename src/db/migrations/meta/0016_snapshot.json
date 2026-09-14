@@ -1,6 +1,6 @@
 {
-  "id": "3e2f411a-2246-4a74-baef-d3ab8343af9b",
-  "prevId": "fc573776-d6b2-4f0e-8641-5b04c308c68e",
+  "id": "b97b7ec0-c55d-443f-aa41-60101db347bf",
+  "prevId": "3e2f411a-2246-4a74-baef-d3ab8343af9b",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -644,7 +644,13 @@
       "indexes": {},
       "foreignKeys": {},
       "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
+      "uniqueConstraints": {
+        "product_barcode_unique": {
+          "name": "product_barcode_unique",
+          "nullsNotDistinct": false,
+          "columns": ["barcode"]
+        }
+      },
       "policies": {},
       "checkConstraints": {},
       "isRLSEnabled": false

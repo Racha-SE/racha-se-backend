@@ -1,4 +1,4 @@
-import { Elysia, t } from "elysia";
+import { Elysia } from "elysia";
 import { authPlugin } from "@/plugins/auth.plugin";
 import { OrdersBranchModel } from "@/models/orders-branch.model";
 import { ordersBranchService } from "@/services/orders-branch.service";
@@ -8,11 +8,6 @@ import {
   tErrorResponse,
   tSuccessResponse,
 } from "@/utils";
-
-const stubResponse = {
-  200: tSuccessResponse(t.Object({ result: t.Null() })),
-  500: tErrorResponse("INTERNAL_SERVER_ERROR"),
-};
 
 export const ordersBranchRoute = new Elysia({ prefix: "/orders/branch" })
   .use(authPlugin)
@@ -97,43 +92,51 @@ export const ordersBranchRoute = new Elysia({ prefix: "/orders/branch" })
         200: tSuccessResponse(OrdersBranchModel.createResponse),
         400: tErrorResponse("BAD_REQUEST"),
         404: tErrorResponse("NOT_FOUND"),
-        409: tErrorResponse("INSUFFICIENT_STOCK"),
         500: tErrorResponse("INTERNAL_SERVER_ERROR"),
       },
       detail: {
         summary: "Request a stock transfer from HQ",
         description:
-          "Branch requests stock from HQ - same actor pattern as US-2.1's HQ-creates-its-own-supplier-order (the receiving party creates the order, not the sender).",
+          "Branch requests stock from HQ - same actor pattern as US-2.1's HQ-creates-its-own-supplier-order (the receiving party creates the order, not the sender). Records the request only: HQ stock is neither checked nor reserved here, so a request for more than HQ holds is still accepted and fails at approval time instead.",
         tags: ["Orders Branch"],
       },
     },
   )
   .patch(
     "/:lotId/approve",
-    async () =>
-      successResponse({ result: await ordersBranchService.approve() }),
+    async ({ user, params: { lotId } }) =>
+      successResponse(await ordersBranchService.approve(lotId, user.id)),
     {
-      auth: ["hq"], // change later
+      auth: ["hq"],
       params: OrdersBranchModel.params,
       response: {
-        ...stubResponse,
+        200: tSuccessResponse(OrdersBranchModel.approveResponse),
+        400: tErrorResponse("BAD_REQUEST"),
+        404: tErrorResponse("NOT_FOUND"),
         409: tErrorResponse("INSUFFICIENT_STOCK"),
+        500: tErrorResponse("INTERNAL_SERVER_ERROR"),
       },
       detail: {
         summary: "Approve a branch order",
         description:
-          "HQ approves a branch's pending request, fulfilling it - same actor relationship as US-2.1's HQ-approves-its-own-supplier-order. Without this step, a branch could request and self-confirm receipt with no HQ involvement at all. Rejects with INSUFFICIENT_STOCK if HQ can no longer cover the requested amount for any line item at approval time.",
+          "HQ approves a branch's pending request, fulfilling it - same actor relationship as US-2.1's HQ-approves-its-own-supplier-order. Without this step, a branch could request and self-confirm receipt with no HQ involvement at all. Rejects with INSUFFICIENT_STOCK if HQ can no longer cover the requested amount for any line item at approval time. If success, the service deducts the approved amount from the linked headOrderDetail lot(s) and copies quantity/expiry/price into branchOrderDetail, branch stock increments immediately.",
         tags: ["Orders Branch"],
       },
     },
   )
   .patch(
     "/:lotId/reject",
-    async () => successResponse({ result: await ordersBranchService.reject() }),
+    async ({ params: { lotId } }) =>
+      successResponse(await ordersBranchService.reject(lotId)),
     {
-      auth: ["hq"], // change later
+      auth: ["hq"],
       params: OrdersBranchModel.params,
-      response: stubResponse,
+      response: {
+        200: tSuccessResponse(OrdersBranchModel.rejectResponse),
+        400: tErrorResponse("BAD_REQUEST"),
+        404: tErrorResponse("NOT_FOUND"),
+        500: tErrorResponse("INTERNAL_SERVER_ERROR"),
+      },
       detail: {
         summary: "Reject a branch order",
         description: "HQ rejects a branch's pending request.",
@@ -141,18 +144,29 @@ export const ordersBranchRoute = new Elysia({ prefix: "/orders/branch" })
       },
     },
   )
-  .post(
+  .patch(
     "/:lotId/receive",
-    async () =>
-      successResponse({ result: await ordersBranchService.receive() }),
+    async ({ user, params }) => {
+      await ordersBranchService.receive(
+        params.lotId,
+        user.branchId ?? undefined,
+      );
+      return successResponse({ message: "branch order received" });
+    },
     {
       auth: ["branch"], // change later
       params: OrdersBranchModel.params,
-      response: stubResponse,
+      response: {
+        200: tSuccessResponse(OrdersBranchModel.receiveResponse),
+        400: tErrorResponse("BAD_REQUEST"),
+        403: tErrorResponse("FORBIDDEN"),
+        404: tErrorResponse("NOT_FOUND"),
+        500: tErrorResponse("INTERNAL_SERVER_ERROR"),
+      },
       detail: {
         summary: "Record stock received at a branch",
         description:
-          "Branch confirms receipt of an approved order; no body needed - the service deducts the approved amount from the linked headOrderDetail lot(s) and copies quantity/expiry/price into branchOrderDetail, branch stock increments immediately.",
+          "Branch confirms receipt of an approved order; no body needed - set status to completed, make noti in hq if amount of each product is below min_stock_hq and resolve noti in branch if amount of each product is greater than equal min_stock_branch",
         tags: ["Orders Branch"],
       },
     },
