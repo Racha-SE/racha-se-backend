@@ -5,7 +5,7 @@
 // A row's scope is its branchId: null means HQ, a branch id scopes it to
 // that branch. Both scopes share the same two alert types:
 //
-// - min_stock: checkMinStock recomputes a product's current stock for a
+// - min_stock: checkMinStock(s) recomputes a product's current stock for a
 //   scope and opens an alert if it's under the scope's threshold
 //   (product.minStockHq for HQ, product.minStockBranch for a branch), or
 //   resolves the open one once stock is back at/above it.
@@ -23,12 +23,18 @@
 //   transaction), and also runs for every product/scope from scanAlerts()
 //   below, so e.g. a minStockHq edit that pushes stock under the new
 //   threshold without anyone touching it still gets caught next scan.
+//   scanAlerts() checks every product/scope pair in one batch (one select
+//   for thresholds, one for current stock, one for already-open alerts, then
+//   at most one update and one insert) rather than one round-trip per pair.
 // - expire: checkExpiringLots opens an alert for any lot (HQ or branch) with
 //   stock left whose expiredDate falls inside EXPIRE_WARNING_DAYS. There's
 //   no order-flow event to hang this on (nothing "happens" when a lot merely
 //   gets closer to expiring), so it only runs from scanAlerts() — meant to
 //   be hit periodically (e.g. an external cron calling POST
-//   /notifications/scan) until a real in-process scheduler exists.
+//   /notifications/scan) until a real in-process scheduler exists. Same
+//   batching approach: one select per scope for the candidate lots, then one
+//   query to find which already have an open alert and one insert for the
+//   rest.
 //
 // Resolving/creating alerts from the write side beyond the above — HQ stock
 // arriving (ordersHqService.create), a branch's own receive step, customer
@@ -58,6 +64,12 @@ type DbOrTx = typeof db | Parameters<Parameters<typeof db.transaction>[0]>[0];
 // system-wide (US-3.5 spells it out as 7 days) since there's no per-product
 // override column yet.
 const EXPIRE_WARNING_DAYS = 7;
+
+/** Groups a (scope, product) pair into one map/set key — null branchId (HQ)
+ * and a branch id can never collide since "hq" isn't a valid id. */
+function scopeKey(branchId: number | null, pId: number): string {
+  return `${branchId ?? "hq"}:${pId}`;
+}
 
 async function listAlerts(
   type: NotificationType,
@@ -96,105 +108,247 @@ async function listAlerts(
     );
 }
 
-async function currentStock(
+/**
+ * Current stock for every (scope, pId) pair in `pairs`, in two queries total
+ * regardless of how many pairs there are: one summing headOrderDetail for
+ * every HQ-scoped pair, one summing branchOrderDetail (grouped by branch)
+ * for every branch-scoped pair. Missing keys mean zero stock.
+ */
+async function currentStocks(
   dbOrTx: DbOrTx,
-  branchId: number | null,
-  pId: number,
-): Promise<number> {
-  if (branchId === null) {
-    const now = new Date();
-    const [{ stock }] = await dbOrTx
-      .select({ stock: sum(headOrderDetail.remain) })
+  pairs: { branchId: number | null; pId: number }[],
+): Promise<Map<string, number>> {
+  const now = new Date();
+  const stockByKey = new Map<string, number>();
+
+  const hqPIds = [
+    ...new Set(
+      pairs.filter(({ branchId }) => branchId === null).map(({ pId }) => pId),
+    ),
+  ];
+  if (hqPIds.length > 0) {
+    const rows = await dbOrTx
+      .select({ pId: headOrderDetail.pId, stock: sum(headOrderDetail.remain) })
       .from(headOrderDetail)
       .innerJoin(order, eq(headOrderDetail.lotId, order.lotId))
       .where(
         and(
-          eq(headOrderDetail.pId, pId),
+          inArray(headOrderDetail.pId, hqPIds),
           eq(order.orderType, "hq"),
           eq(order.status, "approved"),
           gt(headOrderDetail.expiredDate, now),
         ),
-      );
-    return Number(stock ?? 0);
+      )
+      .groupBy(headOrderDetail.pId);
+
+    for (const { pId, stock } of rows) {
+      stockByKey.set(scopeKey(null, pId), Number(stock ?? 0));
+    }
   }
 
-  const [{ stock }] = await dbOrTx
-    .select({ stock: sum(branchOrderDetail.remain) })
-    .from(branchOrderDetail)
-    .where(
-      and(
-        eq(branchOrderDetail.pId, pId),
-        eq(branchOrderDetail.branchId, branchId),
-      ),
-    );
-  return Number(stock ?? 0);
+  const branchPairs = pairs.filter(
+    (pair): pair is { branchId: number; pId: number } => pair.branchId !== null,
+  );
+  if (branchPairs.length > 0) {
+    const branchIds = [...new Set(branchPairs.map(({ branchId }) => branchId))];
+    const branchPIds = [...new Set(branchPairs.map(({ pId }) => pId))];
+    const rows = await dbOrTx
+      .select({
+        branchId: branchOrderDetail.branchId,
+        pId: branchOrderDetail.pId,
+        stock: sum(branchOrderDetail.remain),
+      })
+      .from(branchOrderDetail)
+      .where(
+        and(
+          inArray(branchOrderDetail.branchId, branchIds),
+          inArray(branchOrderDetail.pId, branchPIds),
+        ),
+      )
+      .groupBy(branchOrderDetail.branchId, branchOrderDetail.pId);
+
+    for (const { branchId, pId, stock } of rows) {
+      stockByKey.set(scopeKey(branchId, pId), Number(stock ?? 0));
+    }
+  }
+
+  return stockByKey;
 }
 
 /**
- * Recomputes product `pId`'s current stock for the given scope (`branchId`
- * null = HQ) and opens or resolves that scope's min_stock alert to match:
- * opens one if stock is now under the scope's threshold and none is open
- * yet, resolves the open one once stock is back at/above it. No-ops if the
- * alert state already matches — an already-open alert's snapshot quantity
- * is never rewritten.
+ * Recomputes current stock for every (scope, pId) pair in `pairs` and opens
+ * or resolves that scope's min_stock alert to match: opens one if stock is
+ * now under the scope's threshold and none is open yet, resolves the open
+ * one once stock is back at/above it. No-ops if the alert state already
+ * matches — an already-open alert's snapshot quantity is never rewritten.
+ *
+ * Runs in a fixed number of queries no matter how many pairs are passed: one
+ * select for thresholds, one (see currentStocks) for stock, one for
+ * already-open alerts, then at most one update and one insert.
  */
+async function checkMinStocks(
+  dbOrTx: DbOrTx,
+  pairs: { branchId: number | null; pId: number }[],
+): Promise<void> {
+  if (pairs.length === 0) return;
+  const now = new Date();
+
+  const pIds = [...new Set(pairs.map(({ pId }) => pId))];
+
+  const thresholdByPId = new Map(
+    (
+      await dbOrTx
+        .select({
+          pId: product.pId,
+          minStockHq: product.minStockHq,
+          minStockBranch: product.minStockBranch,
+        })
+        .from(product)
+        .where(inArray(product.pId, pIds))
+    ).map((row) => [row.pId, row]),
+  );
+
+  const stockByKey = await currentStocks(dbOrTx, pairs);
+
+  const openAlertByKey = new Map(
+    (
+      await dbOrTx
+        .select({
+          notificationId: notification.notificationId,
+          branchId: notification.branchId,
+          pId: notification.pId,
+        })
+        .from(notification)
+        .where(
+          and(
+            eq(notification.type, "min_stock"),
+            inArray(notification.pId, pIds),
+            eq(notification.isResolved, false),
+          ),
+        )
+    ).map((row) => [scopeKey(row.branchId, row.pId), row.notificationId]),
+  );
+
+  const toResolve: number[] = [];
+  const toOpen: {
+    type: "min_stock";
+    branchId: number | null;
+    pId: number;
+    quantity: number;
+  }[] = [];
+  const seen = new Set<string>();
+
+  for (const { branchId, pId } of pairs) {
+    const key = scopeKey(branchId, pId);
+    if (seen.has(key)) continue; // pairs can repeat the same (scope, pId)
+    seen.add(key);
+
+    const target = thresholdByPId.get(pId);
+    if (!target) continue;
+
+    const threshold =
+      branchId === null ? target.minStockHq : target.minStockBranch;
+    const stock = stockByKey.get(key) ?? 0;
+    const existingId = openAlertByKey.get(key);
+
+    if (stock < threshold) {
+      if (!existingId)
+        toOpen.push({ type: "min_stock", branchId, pId, quantity: stock });
+    } else if (existingId) {
+      toResolve.push(existingId);
+    }
+  }
+
+  if (toResolve.length > 0) {
+    await dbOrTx
+      .update(notification)
+      .set({ isResolved: true, resolvedAt: now })
+      .where(inArray(notification.notificationId, toResolve));
+  }
+  if (toOpen.length > 0) {
+    await dbOrTx.insert(notification).values(toOpen);
+  }
+}
+
+/** Single-pair convenience wrapper around checkMinStocks, for callers (like
+ * ordersBranchService.create) that only ever have one product/scope to
+ * recheck at a time. */
 async function checkMinStock(
   dbOrTx: DbOrTx,
   branchId: number | null,
   pId: number,
 ): Promise<void> {
-  const now = new Date();
-
-  const [target] = await dbOrTx
-    .select({
-      minStockHq: product.minStockHq,
-      minStockBranch: product.minStockBranch,
-    })
-    .from(product)
-    .where(eq(product.pId, pId));
-  if (!target) return;
-
-  const threshold =
-    branchId === null ? target.minStockHq : target.minStockBranch;
-  const stock = await currentStock(dbOrTx, branchId, pId);
-
-  const [openAlert] = await dbOrTx
-    .select({ notificationId: notification.notificationId })
-    .from(notification)
-    .where(
-      and(
-        eq(notification.type, "min_stock"),
-        branchId === null
-          ? isNull(notification.branchId)
-          : eq(notification.branchId, branchId),
-        eq(notification.pId, pId),
-        eq(notification.isResolved, false),
-      ),
-    );
-
-  if (stock < threshold) {
-    if (!openAlert) {
-      await dbOrTx.insert(notification).values({
-        type: "min_stock",
-        branchId,
-        pId,
-        quantity: stock,
-      });
-    }
-  } else if (openAlert) {
-    await dbOrTx
-      .update(notification)
-      .set({ isResolved: true, resolvedAt: now })
-      .where(eq(notification.notificationId, openAlert.notificationId));
-  }
+  await checkMinStocks(dbOrTx, [{ branchId, pId }]);
 }
 
 /**
- * Opens an expire alert for every HQ lot (branchId null) and every branch
- * lot with stock left whose expiredDate lands inside the warning window and
- * doesn't already have one open. Never resolves expire alerts — nothing in
- * this codebase clears a lot's remaining stock except the branch-draw path,
- * which isn't an "it's no longer expiring" event.
+ * Opens an expire alert for every lot in `lots` whose stock hasn't already
+ * got one open, in two queries total regardless of how many lots are
+ * passed: one to find which (lotId, pId) pairs already have an open expire
+ * alert, one batch insert for the rest. order.lotId is a single serial
+ * shared by HQ and branch orders alike, so a (lotId, pId) pair alone already
+ * identifies the exact detail row - no need to also match on branchId.
+ * Returns how many new alerts were opened.
+ */
+async function openExpireAlerts(
+  dbOrTx: DbOrTx,
+  lots: {
+    branchId: number | null;
+    lotId: number;
+    pId: number;
+    remain: number;
+    expiredDate: Date | null;
+  }[],
+): Promise<number> {
+  const candidates = lots.filter(
+    (lot): lot is typeof lot & { expiredDate: Date } =>
+      lot.expiredDate !== null,
+  );
+  if (candidates.length === 0) return 0;
+
+  const lotIds = [...new Set(candidates.map(({ lotId }) => lotId))];
+
+  const existingKeys = new Set(
+    (
+      await dbOrTx
+        .select({ lotId: notification.lotId, pId: notification.pId })
+        .from(notification)
+        .where(
+          and(
+            eq(notification.type, "expire"),
+            inArray(notification.lotId, lotIds),
+            eq(notification.isResolved, false),
+          ),
+        )
+    ).map(({ lotId, pId }) => `${lotId}:${pId}`),
+  );
+
+  const toInsert = candidates.filter(
+    (lot) => !existingKeys.has(`${lot.lotId}:${lot.pId}`),
+  );
+  if (toInsert.length === 0) return 0;
+
+  await dbOrTx.insert(notification).values(
+    toInsert.map((lot) => ({
+      type: "expire" as const,
+      branchId: lot.branchId,
+      pId: lot.pId,
+      lotId: lot.lotId,
+      quantity: lot.remain,
+      expiredDate: lot.expiredDate,
+    })),
+  );
+
+  return toInsert.length;
+}
+
+/**
+ * Finds every HQ lot (branchId null) and every branch lot with stock left
+ * whose expiredDate lands inside the warning window, and opens an expire
+ * alert for whichever of those don't already have one open. Never resolves
+ * expire alerts — nothing in this codebase clears a lot's remaining stock
+ * except the branch-draw path, which isn't an "it's no longer expiring"
+ * event.
  */
 async function checkExpiringLots(
   dbOrTx: DbOrTx,
@@ -226,11 +380,10 @@ async function checkExpiringLots(
       ),
     );
 
-  let hqOpened = 0;
-  for (const lot of hqLots) {
-    const opened = await openExpireAlert(dbOrTx, null, lot);
-    if (opened) hqOpened++;
-  }
+  const hqOpened = await openExpireAlerts(
+    dbOrTx,
+    hqLots.map((lot) => ({ ...lot, branchId: null })),
+  );
 
   const branchLots = await dbOrTx
     .select({
@@ -249,52 +402,9 @@ async function checkExpiringLots(
       ),
     );
 
-  let branchOpened = 0;
-  for (const lot of branchLots) {
-    const opened = await openExpireAlert(dbOrTx, lot.branchId, lot);
-    if (opened) branchOpened++;
-  }
+  const branchOpened = await openExpireAlerts(dbOrTx, branchLots);
 
   return { hqOpened, branchOpened };
-}
-
-async function openExpireAlert(
-  dbOrTx: DbOrTx,
-  branchId: number | null,
-  lot: {
-    lotId: number;
-    pId: number;
-    remain: number;
-    expiredDate: Date | null;
-  },
-): Promise<boolean> {
-  if (!lot.expiredDate) return false;
-
-  const [existing] = await dbOrTx
-    .select({ notificationId: notification.notificationId })
-    .from(notification)
-    .where(
-      and(
-        eq(notification.type, "expire"),
-        branchId === null
-          ? isNull(notification.branchId)
-          : eq(notification.branchId, branchId),
-        eq(notification.pId, lot.pId),
-        eq(notification.lotId, lot.lotId),
-        eq(notification.isResolved, false),
-      ),
-    );
-  if (existing) return false;
-
-  await dbOrTx.insert(notification).values({
-    type: "expire",
-    branchId,
-    pId: lot.pId,
-    lotId: lot.lotId,
-    quantity: lot.remain,
-    expiredDate: lot.expiredDate,
-  });
-  return true;
 }
 
 export const notificationService = {
@@ -328,7 +438,9 @@ export const notificationService = {
    * Runs min_stock detection for every active product (HQ, plus every
    * branch that has ever had stock moved into it) and expire detection for
    * every HQ/branch lot, in one pass — "the system detects the expiration
-   * status" from US-2.9/US-3.5, since nothing schedules this yet.
+   * status" from US-2.9/US-3.5, since nothing schedules this yet. Batched
+   * throughout: the min_stock pass is one call to checkMinStocks with every
+   * product/scope pair, not one call per pair.
    */
   async scanAlerts(): Promise<{
     hqMinStockChecked: number;
@@ -342,10 +454,6 @@ export const notificationService = {
       .where(eq(product.isActive, true));
     const activeProductIds = activeProducts.map((p) => p.pId);
 
-    for (const pId of activeProductIds) {
-      await checkMinStock(db, null, pId);
-    }
-
     const branchProductPairs =
       activeProductIds.length > 0
         ? await db
@@ -357,9 +465,10 @@ export const notificationService = {
             .where(inArray(branchOrderDetail.pId, activeProductIds))
         : [];
 
-    for (const pair of branchProductPairs) {
-      await checkMinStock(db, pair.branchId, pair.pId);
-    }
+    await checkMinStocks(db, [
+      ...activeProductIds.map((pId) => ({ branchId: null, pId })),
+      ...branchProductPairs,
+    ]);
 
     const { hqOpened, branchOpened } = await checkExpiringLots(db);
 
