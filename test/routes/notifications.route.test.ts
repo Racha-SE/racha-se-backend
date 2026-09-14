@@ -77,6 +77,44 @@ function placeBranchOrder(
   );
 }
 
+function patch(path: string, cookie: string): Promise<Response> {
+  return app.handle(
+    new Request(`http://localhost${path}`, {
+      method: "PATCH",
+      headers: { Cookie: cookie },
+    }),
+  );
+}
+
+/** HQ approves a pending branch order — the point that draws down HQ stock
+ * and fills in the branch order's line items. Returns the order's lotId. */
+async function approveOrder(
+  orderResponse: Response,
+  hqCookie: string,
+): Promise<number> {
+  const body = (await orderResponse.json()) as SuccessBody<{ lotId: number }>;
+  const lotId = body.data.lotId;
+
+  const approved = await patch(`/orders/branch/${lotId}/approve`, hqCookie);
+  expect(approved.status).toBe(200);
+
+  return lotId;
+}
+
+/** HQ approves, then the branch confirms receipt — the flow that actually
+ * settles the stock move and is what raises/resolves the HQ alerts under
+ * test. */
+async function approveAndReceive(
+  orderResponse: Response,
+  hqCookie: string,
+  branchCookie: string,
+): Promise<void> {
+  const lotId = await approveOrder(orderResponse, hqCookie);
+
+  const received = await patch(`/orders/branch/${lotId}/receive`, branchCookie);
+  expect(received.status).toBe(200);
+}
+
 let fixture: OrdersBranchFixture;
 let otherFixture: OrdersBranchFixture;
 let hqCookie: string;
@@ -116,11 +154,14 @@ describe("US-2.9: HQ inventory alerts", () => {
     }>;
     expect(beforeBody.data.result.some((a) => a.pId === pId)).toBe(false);
 
-    // When: the stock falls below the threshold (draw 8, 2 left < 5).
+    // When: the stock falls below the threshold (draw 8, 2 left < 5) — HQ
+    // approves and the branch receives, the flow that draws down HQ stock
+    // and raises the alert.
     const orderResponse = await placeBranchOrder(branchCookie, [
       { pId, amount: 8 },
     ]);
     expect(orderResponse.status).toBe(200);
+    await approveAndReceive(orderResponse, hqCookie, branchCookie);
 
     // Then: the system sends a notification, identifying the affected
     // product and its current stock.
@@ -143,7 +184,10 @@ describe("US-2.9: HQ inventory alerts", () => {
       expiredDate: daysFromNow(30),
     });
 
-    await placeBranchOrder(branchCookie, [{ pId, amount: 8 }]); // remain -> 2, opens the alert
+    const orderResponse = await placeBranchOrder(branchCookie, [
+      { pId, amount: 8 },
+    ]);
+    await approveAndReceive(orderResponse, hqCookie, branchCookie); // remain -> 2, opens the alert
 
     const shortage = await get("/notifications/hq/min-stock", hqCookie);
     const shortageBody = (await shortage.json()) as SuccessBody<{
@@ -225,12 +269,19 @@ describe("US-3.5: branch inventory alerts", () => {
       expiredDate: daysFromNow(30),
     });
 
-    // Given: the stock has changed (branch requests 4) and is lower than
-    // the minimum stock limit (10).
+    // Given: the stock has changed (branch requests 4, HQ approves) and is
+    // lower than the minimum stock limit (10).
     const orderResponse = await placeBranchOrder(branchCookie, [
       { pId, amount: 4 },
     ]);
     expect(orderResponse.status).toBe(200);
+    await approveOrder(orderResponse, hqCookie);
+
+    // Branch min_stock alerts only open on a scan — there's no consuming
+    // order flow yet to hang detection on synchronously (see
+    // notification.service.ts's top comment).
+    const scan = await post("/notifications/scan", hqCookie);
+    expect(scan.status).toBe(200);
 
     // When: the notification view is selected...
     const response = await get(
@@ -259,6 +310,7 @@ describe("US-3.5: branch inventory alerts", () => {
       { pId, amount: 6 },
     ]);
     expect(orderResponse.status).toBe(200);
+    await approveOrder(orderResponse, hqCookie);
 
     await post("/notifications/scan", hqCookie); // the system detects the expiration status
 
