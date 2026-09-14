@@ -1,4 +1,4 @@
-import { Elysia, t } from "elysia";
+import { Elysia } from "elysia";
 import { authPlugin } from "@/plugins/auth.plugin";
 import {
   InventoryModel,
@@ -12,11 +12,6 @@ import {
   toActor,
   tSuccessResponse,
 } from "@/utils";
-
-const stubResponse = {
-  200: tSuccessResponse(t.Object({ result: t.Null() })),
-  500: tErrorResponse("INTERNAL_SERVER_ERROR"),
-};
 
 export const inventoryRoute = new Elysia({ prefix: "/inventory" })
   .use(authPlugin)
