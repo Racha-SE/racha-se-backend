@@ -4,7 +4,29 @@ import { createInsertSchema, createSelectSchema } from "drizzle-typebox";
 import { product } from "@/db/schema";
 import { AppError } from "@/utils/error";
 
-const entity = createSelectSchema(product);
+const row = createSelectSchema(product);
+
+// A product's link to one of its categories — the id (for filters and
+// PATCH categoryIds) and the name (for display) together, so a client never
+// has to join /categories itself. Shared with the inventory responses.
+const categoryRef = t.Object({
+  categoryId: t.Integer(),
+  categoryName: t.String(),
+});
+
+// What every /products endpoint returns: the product row plus its
+// categories, sorted by name (an empty array when it has none).
+const entity = t.Composite([
+  row,
+  t.Object({ categories: t.Array(categoryRef) }),
+]);
+
+const categoryIds = t.Optional(
+  t.Array(t.Integer({ minimum: 1 }), {
+    description:
+      "Replaces the product's categories. Duplicates are ignored; [] removes them all.",
+  }),
+);
 
 /** Trims a string field and rejects it if that leaves it empty. */
 function trimmedNonEmpty(schema: TString, reason: string) {
@@ -35,6 +57,7 @@ const insertSchema = createInsertSchema(product, {
 const baseProductBody = t.Omit(insertSchema, ["pId", "createdAt", "updatedAt"]);
 
 export const ProductsModel = {
+  categoryRef,
   entity,
   params: t.Object({
     id: t.Numeric({ minimum: 1 }),
@@ -42,7 +65,7 @@ export const ProductsModel = {
   listQuery: t.Partial(
     t.Object({
       search: t.String(),
-      categoryId: t.Numeric(),
+      categoryId: t.Numeric({ minimum: 1 }),
       isActive: t.Boolean(),
       limit: t.Numeric(),
       offset: t.Numeric(),
@@ -56,20 +79,16 @@ export const ProductsModel = {
     limit: t.Number(),
     offset: t.Number(),
   }),
-  createBody: t.Composite([
-    baseProductBody,
-    t.Object({
-      categoryIds: t.Optional(t.Array(t.Number())),
-    }),
-  ]),
+  createBody: t.Composite([baseProductBody, t.Object({ categoryIds })]),
   updateBody: t.Composite([
     t.Partial(baseProductBody),
-    t.Object({
-      categoryIds: t.Optional(t.Array(t.Number())),
-    }),
+    t.Object({ categoryIds }),
   ]),
 };
 
+/** A bare `product` table row, before its categories are attached. */
+export type ProductRow = Static<typeof row>;
+export type ProductCategoryRef = Static<typeof categoryRef>;
 export type Product = Static<typeof ProductsModel.entity>;
 export type ListProductsQuery = Static<typeof ProductsModel.listQuery>;
 export type ListProductsResult = Static<typeof ProductsModel.listResult>;

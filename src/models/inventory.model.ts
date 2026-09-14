@@ -1,4 +1,5 @@
 import { t, Static } from "elysia";
+import { ProductsModel } from "@/models/products.model";
 import { tSuccessResponse, tErrorResponse } from "@/utils";
 
 const productDetail = t.Object({
@@ -60,6 +61,7 @@ const productSortOrderEnum = t.Union(
 const HqInventoryQuery = t.Partial(
   t.Object({
     search: t.String({ minLength: 1 }),
+    categoryId: t.Numeric({ minimum: 1 }),
     categoryName: t.String({ minLength: 1 }),
     limit: t.Numeric({ minimum: 1 }),
     offset: t.Numeric({ minimum: 0 }),
@@ -69,12 +71,21 @@ const HqInventoryQuery = t.Partial(
   }),
 );
 
+// `productCategory` predates `categories` and carries names only, so a client
+// couldn't match it to a categoryId. Kept as-is so existing clients don't
+// break; new code should read `categories`.
+const productCategoryNames = t.Array(t.String(), {
+  description: "Category names only — deprecated, use `categories`.",
+});
+const categories = t.Array(ProductsModel.categoryRef);
+
 // Ungrouped: one item per head_order_detail lot, so a product with several
 // lots on hand appears once per lot.
 const HqInventoryItem = t.Object({
   pId: t.Number(),
   productName: t.String(),
-  productCategory: t.Array(t.String()),
+  productCategory: productCategoryNames,
+  categories,
   description: t.String(),
   barcode: t.String(),
   quantity: t.Integer(),
@@ -86,7 +97,8 @@ const HqInventoryItem = t.Object({
 const HqInventoryGroupByProduct = t.Object({
   pId: t.Number(),
   productName: t.String(),
-  productCategory: t.Array(t.String()),
+  productCategory: productCategoryNames,
+  categories,
   description: t.String(),
   barcode: t.String(),
   stocks: t.Array(
