@@ -276,36 +276,6 @@ export const inventoryService = {
     };
   },
 
-  async listHqNearExpiry() {
-    const daysToExpiry = 7;
-    // ดึงข้อมูลจาก head_order_detail แทน เพราะฝั่ง HQ เก็บสต็อกเป็นล็อตไว้ที่นี่
-    const nearExpiryItems = await db
-      .select({
-        lotId: headOrderDetail.lotId,
-        quantity: headOrderDetail.remain,
-        expiredDate: headOrderDetail.expiredDate,
-        product: {
-          pId: product.pId,
-          name: product.name,
-          barcode: product.barcode,
-        },
-      })
-      .from(headOrderDetail)
-      .innerJoin(product, eq(headOrderDetail.pId, product.pId))
-      .where(
-        and(
-          sql`${headOrderDetail.remain} > 0`,
-          isNotNull(headOrderDetail.expiredDate),
-          lte(
-            headOrderDetail.expiredDate,
-            sql`NOW() + INTERVAL '${sql.raw(`${daysToExpiry} days`)}'`,
-          ),
-        ),
-      );
-
-    return nearExpiryItems;
-  },
-
   // --- Branch Scope---
   async getBranchStock(branchId: number) {
     const [foundBranch] = await db

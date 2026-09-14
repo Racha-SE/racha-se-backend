@@ -24,22 +24,6 @@ export const branchStockResponse = {
   404: tErrorResponse("NOT_FOUND"),
 };
 
-// 1. สำหรับ HQ Near Expiry (ไม่มี branchId)
-export const hqNearExpiryResponse = {
-  200: tSuccessResponse(
-    t.Object({
-      result: t.Array(
-        t.Object({
-          lotId: t.Number(),
-          quantity: t.Number(),
-          expiredDate: t.Union([t.Date(), t.String(), t.Null()]),
-          product: productDetail,
-        }),
-      ),
-    }),
-  ),
-};
-
 // 2. สำหรับ Branch Near Expiry (มี branchId ด้วย)
 export const branchNearExpiryResponse = {
   200: tSuccessResponse(
