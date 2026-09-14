@@ -3,28 +3,16 @@ import { authPlugin } from "@/plugins/auth.plugin";
 import { UsersModel } from "@/models/users.model";
 import { usersService } from "@/services/users.service";
 import {
-  type ScopedActor,
   type UserType,
   successResponse,
   tErrorResponse,
+  toActor,
   tSuccessResponse,
 } from "@/utils";
 
 // Only hq and branch accounts manage other accounts — cashier/customer never
 // reach any handler below (authPlugin's macro 403s them first).
 const MANAGER_USER_TYPES: UserType[] = ["hq", "branch"];
-
-function toActor(user: {
-  id: string;
-  userType: UserType;
-  branchId?: number | null;
-}): ScopedActor {
-  return {
-    id: user.id,
-    userType: user.userType,
-    branchId: user.branchId ?? null,
-  };
-}
 
 export const usersRoute = new Elysia({ prefix: "/users" })
   .use(authPlugin)

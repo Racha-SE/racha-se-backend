@@ -10,6 +10,19 @@ export interface ScopedActor {
   branchId: number | null;
 }
 
+/** Builds a {@link ScopedActor} from the authenticated session's `user`. */
+export function toActor(user: {
+  id: string;
+  userType: UserType;
+  branchId?: number | null;
+}): ScopedActor {
+  return {
+    id: user.id,
+    userType: user.userType,
+    branchId: user.branchId ?? null,
+  };
+}
+
 /**
  * Which userTypes an actor's userType is allowed to create/deactivate.
  * hq acts system-wide; branch is confined to cashiers in its own branch;

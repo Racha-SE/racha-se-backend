@@ -13,7 +13,7 @@ export const product = pgTable("product", {
   pId: serial("p_id").primaryKey(),
   name: varchar("name", { length: 255 }).notNull(),
   description: text("description"),
-  barcode: varchar("barcode", { length: 255 }).notNull(),
+  barcode: varchar("barcode", { length: 255 }).notNull().unique(),
   minStockHq: integer("min_stock_hq").notNull().default(0),
   minStockBranch: integer("min_stock_branch").notNull().default(0),
   isActive: boolean("is_active").notNull().default(true),

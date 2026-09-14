@@ -1,22 +1,34 @@
-import { Elysia, t } from "elysia";
+import { Elysia } from "elysia";
 import { authPlugin } from "@/plugins/auth.plugin";
 import { ProductsModel } from "@/models/products.model";
 import { productsService } from "@/services/products.service";
-import { successResponse, tErrorResponse, tSuccessResponse } from "@/utils";
+import {
+  type UserType,
+  successResponse,
+  tErrorResponse,
+  toActor,
+  tSuccessResponse,
+} from "@/utils";
 
-const stubResponse = {
-  200: tSuccessResponse(t.Object({ result: t.Null() })),
-  500: tErrorResponse("INTERNAL_SERVER_ERROR"),
-};
+// HQ, Branch, and Cashier accounts can view products.
+const READ_PRODUCT_TYPES: UserType[] = ["hq", "branch", "cashier"];
+
+// Only HQ managers can create, update, or deactivate products in the catalog.
+const MANAGE_PRODUCT_TYPES: UserType[] = ["hq"];
 
 export const productsRoute = new Elysia({ prefix: "/products" })
   .use(authPlugin)
   .get(
     "/",
-    async () => successResponse({ result: await productsService.list() }),
+    async ({ user, query }) =>
+      successResponse(await productsService.list(toActor(user), query)),
     {
-      auth: true, // change later
-      response: stubResponse,
+      auth: READ_PRODUCT_TYPES,
+      query: ProductsModel.listQuery,
+      response: {
+        200: tSuccessResponse(ProductsModel.listResult),
+        500: tErrorResponse("INTERNAL_SERVER_ERROR"),
+      },
       detail: {
         summary: "List products (searchable)",
         description: "Search/select an existing product to add to the order.",
@@ -26,11 +38,16 @@ export const productsRoute = new Elysia({ prefix: "/products" })
   )
   .get(
     "/:id",
-    async () => successResponse({ result: await productsService.getById() }),
+    async ({ user, params }) =>
+      successResponse(await productsService.getById(toActor(user), params.id)),
     {
-      auth: true, // change later
+      auth: READ_PRODUCT_TYPES,
       params: ProductsModel.params,
-      response: stubResponse,
+      response: {
+        200: tSuccessResponse(ProductsModel.entity),
+        404: tErrorResponse("NOT_FOUND"),
+        500: tErrorResponse("INTERNAL_SERVER_ERROR"),
+      },
       detail: {
         summary: "Get a single product",
         description:
@@ -41,11 +58,18 @@ export const productsRoute = new Elysia({ prefix: "/products" })
   )
   .post(
     "/",
-    async () => successResponse({ result: await productsService.create() }),
+    async ({ user, body }) =>
+      successResponse(await productsService.create(toActor(user), body)),
     {
-      auth: true, // change later
+      auth: MANAGE_PRODUCT_TYPES,
       body: ProductsModel.createBody,
-      response: stubResponse,
+      response: {
+        200: tSuccessResponse(ProductsModel.entity),
+        400: tErrorResponse("BAD_REQUEST"),
+        403: tErrorResponse("FORBIDDEN"),
+        409: tErrorResponse("ALREADY_EXISTS"),
+        500: tErrorResponse("INTERNAL_SERVER_ERROR"),
+      },
       detail: {
         summary: "Create a product",
         description:
@@ -56,12 +80,22 @@ export const productsRoute = new Elysia({ prefix: "/products" })
   )
   .patch(
     "/:id",
-    async () => successResponse({ result: await productsService.update() }),
+    async ({ user, params, body }) =>
+      successResponse(
+        await productsService.update(toActor(user), params.id, body),
+      ),
     {
-      auth: true, // change later
+      auth: MANAGE_PRODUCT_TYPES,
       params: ProductsModel.params,
       body: ProductsModel.updateBody,
-      response: stubResponse,
+      response: {
+        200: tSuccessResponse(ProductsModel.entity),
+        400: tErrorResponse("BAD_REQUEST"),
+        403: tErrorResponse("FORBIDDEN"),
+        404: tErrorResponse("NOT_FOUND"),
+        409: tErrorResponse("ALREADY_EXISTS"),
+        500: tErrorResponse("INTERNAL_SERVER_ERROR"),
+      },
       detail: {
         summary: "Update a product",
         description:
@@ -72,11 +106,19 @@ export const productsRoute = new Elysia({ prefix: "/products" })
   )
   .delete(
     "/:id",
-    async () => successResponse({ result: await productsService.deactivate() }),
+    async ({ user, params }) =>
+      successResponse(
+        await productsService.deactivate(toActor(user), params.id),
+      ),
     {
-      auth: true, // change later
+      auth: MANAGE_PRODUCT_TYPES,
       params: ProductsModel.params,
-      response: stubResponse,
+      response: {
+        200: tSuccessResponse(ProductsModel.entity),
+        403: tErrorResponse("FORBIDDEN"),
+        404: tErrorResponse("NOT_FOUND"),
+        500: tErrorResponse("INTERNAL_SERVER_ERROR"),
+      },
       detail: {
         summary: "Deactivate a product",
         description: "Change isActive to false",
