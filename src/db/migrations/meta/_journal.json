@@ -110,8 +110,15 @@
     {
       "idx": 15,
       "version": "7",
-      "when": 1789305977406,
-      "tag": "0015_unknown_firebird",
+      "when": 1789307018727,
+      "tag": "0015_right_serpent_society",
+      "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1789361387986,
+      "tag": "0016_yellow_silhouette",
       "breakpoints": true
     }
   ]

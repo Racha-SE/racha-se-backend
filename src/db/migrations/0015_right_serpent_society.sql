@@ -1,0 +1,1 @@
+DROP TABLE "branch_order_allocation" CASCADE;
