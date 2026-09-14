@@ -59,6 +59,7 @@ Four layers, one direction of dependency only — never import "up" the list:
 - Changed the schema? `bun run db:generate` then `bun run db:migrate` (see README). Never hand-edit a migration file that's already been applied; generate a new one.
 - Constructs the Drizzle schema builder can't express (triggers, stored procedures) go in a **custom migration** — `bunx drizzle-kit generate --custom --name=<name>` makes an empty file in `src/db/migrations/`; write raw SQL into it. `src/db/migrations/0001_triggers.sql` is the example. `seeds/triggers.sql` is a **reference copy only** — it says so at the top of the file — editing it does nothing to the database; edit the migration (or generate a new one) instead.
 - `seeds/` is at the repo root, not under `src/db/` — seed data (`mock_users.sql`) isn't schema, so it doesn't live alongside `src/db/schema/`/`src/db/migrations/`.
+- The HQ demo data is the exception: it's a script (`scripts/seed-demo.ts`), not a `.sql` file in `seeds/`, because static SQL can't do what it needs — expiry dates relative to when it runs (a hardcoded "near expiry" date goes stale within a week), a demo login created through better-auth (real password hash), and a self-check that runs the real `scanAlerts()`/`getHqStock()` afterwards. If you change inventory or notification logic and `bun run db:seed:demo` starts failing its self-check, update the product's `alerts`/`listed` expectations in the script (and the README table) to match the new behavior.
 
 ## Docker / ports
 

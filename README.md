@@ -45,19 +45,20 @@ The API is now at `http://localhost:3000/api/v1`.
 
 ## Scripts
 
-| Command                      | What it does                                                                            |
-| ---------------------------- | --------------------------------------------------------------------------------------- |
-| `bun run dev`                | Start the dev server with `--watch` (`NODE_ENV=development`)                            |
-| `bun run typecheck`          | `tsc --noEmit`                                                                          |
-| `bun run lint`               | `eslint .`                                                                              |
-| `bun run lint:fix`           | `eslint --fix .`                                                                        |
-| `bun run format`             | `prettier --check .`                                                                    |
-| `bun run format:fix`         | `prettier --write .`                                                                    |
-| `bun run db:generate`        | Generate a migration from `src/db/schema/`                                              |
-| `bun run db:migrate`         | Apply pending migrations to `DATABASE_URL`                                              |
-| `bun run db:studio`          | Open [Drizzle Studio](https://orm.drizzle.team/drizzle-studio/overview) (DB browser UI) |
-| `bun run db:seed:mock-users` | Reset `mock_users` to a fixed set of 9 names (`seeds/mock_users.sql`)                   |
-| `bun run create-admin`       | One-off: create the first admin account (see "Authentication" below)                    |
+| Command                      | What it does                                                                                     |
+| ---------------------------- | ------------------------------------------------------------------------------------------------ |
+| `bun run dev`                | Start the dev server with `--watch` (`NODE_ENV=development`)                                     |
+| `bun run typecheck`          | `tsc --noEmit`                                                                                   |
+| `bun run lint`               | `eslint .`                                                                                       |
+| `bun run lint:fix`           | `eslint --fix .`                                                                                 |
+| `bun run format`             | `prettier --check .`                                                                             |
+| `bun run format:fix`         | `prettier --write .`                                                                             |
+| `bun run db:generate`        | Generate a migration from `src/db/schema/`                                                       |
+| `bun run db:migrate`         | Apply pending migrations to `DATABASE_URL`                                                       |
+| `bun run db:studio`          | Open [Drizzle Studio](https://orm.drizzle.team/drizzle-studio/overview) (DB browser UI)          |
+| `bun run db:seed:mock-users` | Reset `mock_users` to a fixed set of 9 names (`seeds/mock_users.sql`)                            |
+| `bun run db:seed:demo`       | **Wipes** products/suppliers/orders/notifications and loads HQ demo data (see "Demo data" below) |
+| `bun run create-admin`       | One-off: create the first admin account (see "Authentication" below)                             |
 
 ## Routes
 
@@ -138,6 +139,34 @@ Migration files in `src/db/migrations/` are committed to git — never hand-edit
 `mock_users` is a demo-only table kept separate from the real business schema (`user`, `branch`, `supplier`, `product`, `order`, ...) — it exists purely so the `/mock/users` routes can demonstrate the full DB-backed pattern. See [CONTRIBUTING.md](./CONTRIBUTING.md) for the distinction.
 
 `bun run db:seed:mock-users` truncates and reseeds `mock_users` with a fixed set of names (`seeds/mock_users.sql`).
+
+## Demo data
+
+`bun run db:seed:demo` (`scripts/seed-demo.ts`) fills a local database with an HQ catalog for frontend work and demos — 20 products, 23 stock lots, 3 suppliers, 8 categories — shaped so every HQ inventory alert has something to show. It's for local development only (it refuses to run with `NODE_ENV=production`).
+
+```bash
+docker compose up -d db
+bun run db:migrate
+bun run db:seed:demo
+bun run dev
+```
+
+Sign in with `POST /api/v1/auth/sign-in/email` as `hq.demo@racha-se.local` / `DemoPassword123!` (a `userType: "hq"` account the script creates on first run — not an admin, so `create-admin` still works afterwards).
+
+**Every run wipes** `product`, `product_category`, `product_category_map`, `supplier`, `order`, all three order-detail tables and `notification`, then reloads the same data; users and branches are kept. Re-run it whenever you want a clean slate. Expiry dates are relative to the moment it runs, so "expires in 3 days" is always 3 days from now.
+
+What it produces (the script checks this itself after seeding and exits non-zero if the real inventory/notification logic disagrees):
+
+| Endpoint                                 | Expected                                                                                                       |
+| ---------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| `GET /api/v1/inventory/hq`               | 21 lots (default page size is 20 — pass `limit`/`offset` to see the rest)                                      |
+| `GET /api/v1/inventory/hq?groupBy=true`  | 17 products — Eggs (empty lot), Cooking Oil (never delivered) and Classic Cola (inactive) are left out         |
+| `GET /api/v1/notifications/hq/min-stock` | 7 alerts: Instant Noodles, Canned Tuna, Milk Chocolate Bar, Eggs, Whole Wheat Bread, Greek Yogurt, Cooking Oil |
+| `GET /api/v1/notifications/hq/expire`    | 2 alerts: Fresh Milk (one of its two lots, 3 days left) and Greek Yogurt (5 days left)                         |
+
+Two results that look odd but are how the real logic works: Whole Wheat Bread expired 2 days ago, so it raises a **min_stock** alert (expired lots don't count as usable stock) but **no** expire alert (that alert only covers lots expiring within the next 7 days). Orange Juice expires in 10 days — just outside that window — so it has no alert yet. Prices are whole baht.
+
+Alerts come from the real `notificationService.scanAlerts()` (the same thing `POST /api/v1/notifications/scan` runs), not hand-inserted rows — so after changing stock by hand, call that endpoint to refresh them.
 
 ## Pre-commit
 
