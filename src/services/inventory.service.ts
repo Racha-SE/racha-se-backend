@@ -31,6 +31,8 @@ import type {
   HqInventoryQuery,
   HqInventoryResult,
 } from "@/models/inventory.model";
+import type { ProductCategoryRef } from "@/models/products.model";
+import { categoriesFor } from "@/services/products.service";
 import { assertBranchScope, type ScopedActor } from "@/utils";
 
 const DEFAULT_LIMIT = 20;
@@ -49,32 +51,12 @@ function onHandLots(): SQL | undefined {
   );
 }
 
-/**
- * Categories are many-per-product: joining them into the listing query would
- * multiply its rows and break limit/offset, so they're fetched for the page
- * that query returned. Ids may repeat (one row per lot), hence the dedupe.
- */
-async function categoriesFor(pIds: number[]): Promise<Map<number, string[]>> {
-  const rows = await db
-    .select({
-      pId: productCategoryMap.pId,
-      categoryName: productCategory.categoryName,
-    })
-    .from(productCategoryMap)
-    .innerJoin(
-      productCategory,
-      eq(productCategory.categoryId, productCategoryMap.categoryId),
-    )
-    .where(inArray(productCategoryMap.pId, [...new Set(pIds)]))
-    .orderBy(productCategory.categoryName);
-
-  const categoriesByProduct = new Map<number, string[]>();
-  for (const { pId, categoryName } of rows) {
-    const categories = categoriesByProduct.get(pId) ?? [];
-    categories.push(categoryName);
-    categoriesByProduct.set(pId, categories);
-  }
-  return categoriesByProduct;
+/** Both category fields of an inventory item, from one product's categories. */
+function categoryFields(categories: ProductCategoryRef[] = []) {
+  return {
+    productCategory: categories.map(({ categoryName }) => categoryName),
+    categories,
+  };
 }
 
 export const inventoryService = {
@@ -95,6 +77,19 @@ export const inventoryService = {
         ? or(
             ilike(product.name, `%${query.search}%`),
             ilike(product.barcode, `%${query.search}%`),
+          )
+        : undefined,
+      query.categoryId !== undefined
+        ? exists(
+            db
+              .select({ pId: productCategoryMap.pId })
+              .from(productCategoryMap)
+              .where(
+                and(
+                  eq(productCategoryMap.pId, product.pId),
+                  eq(productCategoryMap.categoryId, query.categoryId),
+                ),
+              ),
           )
         : undefined,
       query.categoryName
@@ -182,7 +177,7 @@ export const inventoryService = {
           productName: row.productName,
           description: row.description ?? "",
           barcode: row.barcode,
-          productCategory: categoriesByProduct.get(row.pId) ?? [],
+          ...categoryFields(categoriesByProduct.get(row.pId)),
           quantity: row.quantity,
           price: row.price,
           expiredDate: row.expiredDate.toISOString(),
@@ -269,7 +264,7 @@ export const inventoryService = {
         productName: row.productName,
         description: row.description ?? "",
         barcode: row.barcode,
-        productCategory: categoriesByProduct.get(row.pId) ?? [],
+        ...categoryFields(categoriesByProduct.get(row.pId)),
         stocks: stocksByProduct.get(row.pId) ?? [],
       })),
       totalCount,

@@ -1,7 +1,7 @@
 import { eq } from "drizzle-orm";
 import { db } from "@/db/client";
 import { productCategory } from "@/db/schema";
-import { AppError } from "@/utils";
+import { AppError, postgresError } from "@/utils";
 import type {
   CreateCategoryBody,
   UpdateCategoryBody,
@@ -42,8 +42,7 @@ export const categoriesService = {
 
       return newCategory;
     } catch (error: unknown) {
-      const err = error as { code?: string };
-      if (err.code === "23505") {
+      if (postgresError(error)?.errno === "23505") {
         throw new AppError("ALREADY_EXISTS");
       }
       throw error;
@@ -73,8 +72,7 @@ export const categoriesService = {
 
       return updatedCategory;
     } catch (error: unknown) {
-      const err = error as { code?: string };
-      if (err.code === "23505") {
+      if (postgresError(error)?.errno === "23505") {
         throw new AppError("ALREADY_EXISTS");
       }
       throw error;
@@ -92,8 +90,9 @@ export const categoriesService = {
 
       return deletedCategory;
     } catch (error: unknown) {
-      const err = error as { code?: string };
-      if (err.code === "23503") {
+      // Still referenced by product_category_map — the FK is what enforces
+      // "in use", so there's no separate pre-check to race against.
+      if (postgresError(error)?.errno === "23503") {
         throw new AppError("CATEGORY_IN_USE");
       }
       throw error;

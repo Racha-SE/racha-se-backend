@@ -31,7 +31,8 @@ export const productsRoute = new Elysia({ prefix: "/products" })
       },
       detail: {
         summary: "List products (searchable)",
-        description: "Search/select an existing product to add to the order.",
+        description:
+          "Search/select an existing product to add to the order. Filter by `search` (name/barcode), `categoryId` and/or `isActive`; each product carries its `categories` ({ categoryId, categoryName }).",
         tags: ["Products"],
       },
     },

@@ -1,9 +1,15 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { Elysia } from "elysia";
-import { eq, inArray } from "drizzle-orm";
+import { eq, inArray, max } from "drizzle-orm";
 import { db } from "@/db/client";
-import { branch, product, user } from "@/db/schema";
-import type { Product } from "@/models/products.model";
+import {
+  branch,
+  product,
+  productCategory,
+  productCategoryMap,
+  user,
+} from "@/db/schema";
+import type { Product, ProductCategoryRef } from "@/models/products.model";
 import { errorHandler } from "@/plugins/error-handler";
 import { authRoute, productsRoute } from "@/routes";
 import { auth, type UserType } from "@/utils";
@@ -25,7 +31,11 @@ interface ErrorBody {
 
 const createdUserIds: string[] = [];
 const createdProductIds: number[] = [];
+const createdCategoryIds: number[] = [];
 let testBranchId: number;
+// Prefixed so they sort the same under any collation: "aaa" before "zzz".
+let firstCategory: ProductCategoryRef;
+let secondCategory: ProductCategoryRef;
 let hqCookie: string;
 let cashierCookie: string;
 let customerCookie: string;
@@ -97,7 +107,33 @@ async function createProduct(
   return response;
 }
 
+async function createCategory(prefix: string): Promise<ProductCategoryRef> {
+  const [created] = await db
+    .insert(productCategory)
+    .values({ categoryName: `${prefix} Products Test ${crypto.randomUUID()}` })
+    .returning({
+      categoryId: productCategory.categoryId,
+      categoryName: productCategory.categoryName,
+    });
+  createdCategoryIds.push(created.categoryId);
+
+  return created;
+}
+
+async function patchProduct(pId: number, body: Record<string, unknown>) {
+  return await app.handle(
+    new Request(`http://localhost/products/${pId}`, {
+      method: "PATCH",
+      headers: authHeaders(hqCookie),
+      body: JSON.stringify(body),
+    }),
+  );
+}
+
 beforeAll(async () => {
+  firstCategory = await createCategory("aaa");
+  secondCategory = await createCategory("zzz");
+
   const [createdBranch] = await db
     .insert(branch)
     .values({
@@ -115,7 +151,16 @@ beforeAll(async () => {
 
 afterAll(async () => {
   if (createdProductIds.length > 0) {
+    // category links reference the product, so they go first
+    await db
+      .delete(productCategoryMap)
+      .where(inArray(productCategoryMap.pId, createdProductIds));
     await db.delete(product).where(inArray(product.pId, createdProductIds));
+  }
+  if (createdCategoryIds.length > 0) {
+    await db
+      .delete(productCategory)
+      .where(inArray(productCategory.categoryId, createdCategoryIds));
   }
   if (createdUserIds.length > 0) {
     await db.delete(user).where(inArray(user.id, createdUserIds));
@@ -401,5 +446,197 @@ describe("GET /products", () => {
       createdBody.data.pId,
     );
     expect(body.data.total).toBeGreaterThanOrEqual(1);
+  });
+
+  test("filters by categoryId", async () => {
+    const inFirst = (await (
+      await createProduct(hqCookie, {
+        categoryIds: [firstCategory.categoryId],
+      })
+    ).json()) as SuccessBody<Product>;
+    const inSecond = (await (
+      await createProduct(hqCookie, {
+        categoryIds: [secondCategory.categoryId],
+      })
+    ).json()) as SuccessBody<Product>;
+
+    const response = await app.handle(
+      new Request(
+        `http://localhost/products?categoryId=${firstCategory.categoryId}&limit=100`,
+        { headers: authHeaders(hqCookie) },
+      ),
+    );
+    const body = (await response.json()) as SuccessBody<{
+      products: Product[];
+    }>;
+    const pIds = body.data.products.map((p) => p.pId);
+
+    expect(response.status).toBe(200);
+    expect(pIds).toContain(inFirst.data.pId);
+    expect(pIds).not.toContain(inSecond.data.pId);
+    for (const found of body.data.products) {
+      expect(found.categories.map((c) => c.categoryId)).toContain(
+        firstCategory.categoryId,
+      );
+    }
+  });
+});
+
+describe("product categories", () => {
+  test("POST links the given categories and returns them sorted by name", async () => {
+    const response = await createProduct(hqCookie, {
+      // out of order and with a duplicate, on purpose
+      categoryIds: [
+        secondCategory.categoryId,
+        firstCategory.categoryId,
+        secondCategory.categoryId,
+      ],
+    });
+    const body = (await response.json()) as SuccessBody<Product>;
+
+    expect(response.status).toBe(200);
+    expect(body.data.categories).toEqual([firstCategory, secondCategory]);
+
+    const links = await db
+      .select()
+      .from(productCategoryMap)
+      .where(eq(productCategoryMap.pId, body.data.pId));
+    expect(links.length).toBe(2);
+  });
+
+  test("POST without categoryIds returns an empty categories array", async () => {
+    const response = await createProduct(hqCookie);
+    const body = (await response.json()) as SuccessBody<Product>;
+
+    expect(response.status).toBe(200);
+    expect(body.data.categories).toEqual([]);
+  });
+
+  test("POST with an unknown category id returns 400 and creates nothing", async () => {
+    const [{ highest }] = await db
+      .select({ highest: max(productCategory.categoryId) })
+      .from(productCategory);
+    const unknownId = (highest ?? 0) + 1000;
+    const barcode = crypto.randomUUID();
+
+    const response = await createProduct(hqCookie, {
+      barcode,
+      categoryIds: [firstCategory.categoryId, unknownId],
+    });
+    const body = (await response.json()) as ErrorBody;
+
+    expect(response.status).toBe(400);
+    expect(body.error.code).toBe("BAD_REQUEST");
+    expect(body.error.context?.categoryIds).toEqual([unknownId]);
+
+    // the product insert is rolled back along with the failed category links
+    const rows = await db
+      .select({ pId: product.pId })
+      .from(product)
+      .where(eq(product.barcode, barcode));
+    expect(rows.length).toBe(0);
+  });
+
+  test("GET /products/:id includes the product's categories", async () => {
+    const created = (await (
+      await createProduct(hqCookie, {
+        categoryIds: [firstCategory.categoryId],
+      })
+    ).json()) as SuccessBody<Product>;
+
+    const response = await app.handle(
+      new Request(`http://localhost/products/${created.data.pId}`, {
+        headers: authHeaders(hqCookie),
+      }),
+    );
+    const body = (await response.json()) as SuccessBody<Product>;
+
+    expect(response.status).toBe(200);
+    expect(body.data.categories).toEqual([firstCategory]);
+  });
+
+  test("PATCH with only categoryIds replaces the categories and nothing else", async () => {
+    const created = (await (
+      await createProduct(hqCookie, {
+        categoryIds: [firstCategory.categoryId],
+      })
+    ).json()) as SuccessBody<Product>;
+
+    const response = await patchProduct(created.data.pId, {
+      categoryIds: [secondCategory.categoryId],
+    });
+    const body = (await response.json()) as SuccessBody<Product>;
+
+    expect(response.status).toBe(200);
+    expect(body.data.categories).toEqual([secondCategory]);
+    expect(body.data.name).toBe(created.data.name);
+    expect(body.data.barcode).toBe(created.data.barcode);
+  });
+
+  test("PATCH with categoryIds [] removes every category", async () => {
+    const created = (await (
+      await createProduct(hqCookie, {
+        categoryIds: [firstCategory.categoryId, secondCategory.categoryId],
+      })
+    ).json()) as SuccessBody<Product>;
+
+    const response = await patchProduct(created.data.pId, { categoryIds: [] });
+    const body = (await response.json()) as SuccessBody<Product>;
+
+    expect(response.status).toBe(200);
+    expect(body.data.categories).toEqual([]);
+  });
+
+  test("PATCH without categoryIds leaves the categories alone", async () => {
+    const created = (await (
+      await createProduct(hqCookie, {
+        categoryIds: [firstCategory.categoryId],
+      })
+    ).json()) as SuccessBody<Product>;
+
+    const response = await patchProduct(created.data.pId, { costPrice: 1234 });
+    const body = (await response.json()) as SuccessBody<Product>;
+
+    expect(response.status).toBe(200);
+    expect(body.data.costPrice).toBe(1234);
+    expect(body.data.categories).toEqual([firstCategory]);
+  });
+
+  test("PATCH with an unknown category id returns 400 and keeps the old ones", async () => {
+    const created = (await (
+      await createProduct(hqCookie, {
+        categoryIds: [firstCategory.categoryId],
+      })
+    ).json()) as SuccessBody<Product>;
+    const [{ highest }] = await db
+      .select({ highest: max(productCategory.categoryId) })
+      .from(productCategory);
+
+    const response = await patchProduct(created.data.pId, {
+      name: "Should not apply",
+      categoryIds: [(highest ?? 0) + 1000],
+    });
+    expect(response.status).toBe(400);
+
+    const after = await app.handle(
+      new Request(`http://localhost/products/${created.data.pId}`, {
+        headers: authHeaders(hqCookie),
+      }),
+    );
+    const afterBody = (await after.json()) as SuccessBody<Product>;
+    expect(afterBody.data.name).toBe(created.data.name);
+    expect(afterBody.data.categories).toEqual([firstCategory]);
+  });
+
+  test("PATCH with an empty body is a no-op, not a 500", async () => {
+    const created = (await (
+      await createProduct(hqCookie)
+    ).json()) as SuccessBody<Product>;
+
+    const response = await patchProduct(created.data.pId, {});
+    const body = (await response.json()) as SuccessBody<Product>;
+
+    expect(response.status).toBe(200);
+    expect(body.data.name).toBe(created.data.name);
   });
 });
