@@ -40,18 +40,30 @@ function utcTimestamp(value: Date) {
   return sql`${value.toISOString()}::timestamp`;
 }
 
+type OrderStatus = (typeof order.status.enumValues)[number];
+
 /**
  * Reads the branch order at `lotId` and holds it for the rest of the
- * transaction, so approve and reject can't both land on the same pending
- * order. Fails the way both routes document it: 404 when there's no such
- * branch order, 400 when someone has already decided on it.
+ * transaction, so no two decisions can land on the same order: approve and
+ * reject both wait on `pending`, receive waits on `approved`. Fails the way
+ * the routes document it: 404 when there's no such branch order, 400 when the
+ * order isn't in the state the caller needs.
+ *
+ * Only the order row is locked - the user join is there to tell the caller
+ * which branch owns the order, and locking a user row would serialise every
+ * order that branch user ever placed.
  */
-async function lockPendingOrder(tx: Transaction, lotId: number) {
+async function lockOrder(
+  tx: Transaction,
+  lotId: number,
+  expectedStatus: OrderStatus = "pending",
+) {
   const [existing] = await tx
-    .select()
+    .select({ order, branchId: user.branchId })
     .from(order)
+    .innerJoin(user, eq(user.id, order.userId))
     .where(and(eq(order.lotId, lotId), eq(order.orderType, "branch")))
-    .for("update");
+    .for("update", { of: order });
 
   if (!existing) {
     throw new AppError("NOT_FOUND", {
@@ -59,13 +71,13 @@ async function lockPendingOrder(tx: Transaction, lotId: number) {
     });
   }
 
-  if (existing.status !== "pending") {
+  if (existing.order.status !== expectedStatus) {
     throw new AppError("BAD_REQUEST", {
-      message: `Branch order is already ${existing.status}`,
+      message: `Branch order is ${existing.order.status}, expected ${expectedStatus}`,
     });
   }
 
-  return existing;
+  return { ...existing.order, branchId: existing.branchId };
 }
 
 export const ordersBranchService = {
@@ -295,7 +307,7 @@ export const ordersBranchService = {
       // Locking the order row first is what keeps two HQ users approving the
       // same order from both passing the stock check and drawing the lots
       // down twice.
-      await lockPendingOrder(tx, lotId);
+      await lockOrder(tx, lotId);
 
       const lines = await tx
         .select()
@@ -447,7 +459,7 @@ export const ordersBranchService = {
    */
   async reject(lotId: number): Promise<OrdersBranchRejectResponse> {
     return db.transaction(async (tx) => {
-      await lockPendingOrder(tx, lotId);
+      await lockOrder(tx, lotId);
 
       const [rejected] = await tx
         .update(order)
@@ -496,30 +508,14 @@ export const ordersBranchService = {
           message: "invalid branch user",
         });
       }
-      // Lock the order row (not the joined user row) so two concurrent
-      // receives can't both read "approved" and complete it twice.
-      const [branchOrder] = await tx
-        .select()
-        .from(order)
-        .innerJoin(user, eq(order.userId, user.id))
-        .where(and(eq(order.orderType, "branch"), eq(order.lotId, lotid)))
-        .for("update", { of: order });
+      // Holds the order row so two concurrent receives can't both read
+      // "approved" and complete it twice. A branch only ever signs for a
+      // delivery HQ approved, so that's the state this waits on.
+      const branchOrder = await lockOrder(tx, lotid, "approved");
 
-      if (!branchOrder) {
-        throw new AppError("NOT_FOUND", {
-          message: "Order Not Found",
-        });
-      }
-
-      if (branchOrder.user.branchId !== branchId) {
+      if (branchOrder.branchId !== branchId) {
         throw new AppError("FORBIDDEN", {
           message: "not branch owner",
-        });
-      }
-
-      if (branchOrder.order.status !== "approved") {
-        throw new AppError("BAD_REQUEST", {
-          message: "branch order status must be approved",
         });
       }
 
