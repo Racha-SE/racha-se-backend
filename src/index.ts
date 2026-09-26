@@ -12,6 +12,7 @@ import {
   mockRoute,
   notificationsRoute,
   ordersBranchRoute,
+  ordersCustomerRoute,
   ordersHqRoute,
   productsRoute,
   suppliersRoute,
@@ -61,6 +62,10 @@ export const app = new Elysia()
             description: "Stock transfer requests from a branch to HQ",
           },
           {
+            name: "Orders Customer",
+            description: "POS checkout orders against a branch's on-hand stock",
+          },
+          {
             name: "Inventory",
             description: "Live, searchable stock-on-hand queries",
           },
@@ -92,6 +97,7 @@ export const app = new Elysia()
       .use(categoriesRoute)
       .use(ordersHqRoute)
       .use(ordersBranchRoute)
+      .use(ordersCustomerRoute)
       .use(inventoryRoute)
       .use(notificationsRoute)
       .use(branchesRoute);

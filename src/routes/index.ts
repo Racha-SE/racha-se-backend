@@ -7,6 +7,7 @@ export * from "./mock-auth.route";
 export * from "./mock.route";
 export * from "./notifications.route";
 export * from "./orders-branch.route";
+export * from "./orders-customer.route";
 export * from "./orders-hq.route";
 export * from "./products.route";
 export * from "./suppliers.route";
