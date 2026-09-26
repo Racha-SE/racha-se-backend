@@ -22,7 +22,7 @@ export const orderStatusEnum = pgEnum("order_status", [
   "pending",
   "approved",
   "rejected",
-  "completed", // branch only
+  "completed", // branch and customer
 ]);
 
 export const order = pgTable("order", {
@@ -92,6 +92,11 @@ export const customerOrderDetail = pgTable(
       .notNull()
       .references(() => product.pId),
     basePrice: integer("unit_price").notNull().default(0),
+    // Which branchOrderDetail lot this row was drawn from — lets cancel()
+    // credit back the exact lot, not one picked fresh by a second FEFO pass.
+    bodId: integer("bod_id")
+      .notNull()
+      .references(() => branchOrderDetail.bodId),
     ...timestamps(),
   },
   (table) => ({

@@ -124,12 +124,16 @@ export const customerOrderDetailRelations = relations(
       fields: [customerOrderDetail.pId],
       references: [product.pId],
     }),
+    sourceLot: one(branchOrderDetail, {
+      fields: [customerOrderDetail.bodId],
+      references: [branchOrderDetail.bodId],
+    }),
   }),
 );
 
 export const branchOrderDetailRelations = relations(
   branchOrderDetail,
-  ({ one }) => ({
+  ({ one, many }) => ({
     order: one(order, {
       fields: [branchOrderDetail.lotId],
       references: [order.lotId],
@@ -142,6 +146,7 @@ export const branchOrderDetailRelations = relations(
       fields: [branchOrderDetail.pId],
       references: [product.pId],
     }),
+    customerOrderDetails: many(customerOrderDetail),
   }),
 );
 
