@@ -301,9 +301,6 @@ export const ordersCustomerService = {
           orderBy: (customerOrderDetail, { asc }) =>
             asc(customerOrderDetail.codId),
         },
-        user: {
-          columns: { branchId: true },
-        },
       },
     });
 
@@ -313,13 +310,16 @@ export const ordersCustomerService = {
       });
     }
 
-    if (customerOrder.user.branchId !== branchId) {
+    // Scoped by the branchId stamped on the order's own line items at
+    // create time — not the caller's current branch via a user join, which
+    // would silently re-scope an order if its cashier later moved branches.
+    if (customerOrder.customerOrderDetails[0]?.branchId !== branchId) {
       throw new AppError("FORBIDDEN", {
         message: "This customer order belongs to another branch",
       });
     }
 
-    const { customerOrderDetails, user: _user, ...orderFields } = customerOrder;
+    const { customerOrderDetails, ...orderFields } = customerOrder;
 
     return {
       ...orderFields,
