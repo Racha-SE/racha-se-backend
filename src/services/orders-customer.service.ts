@@ -8,14 +8,8 @@ import type {
   OrdersCustomerQuery,
 } from "@/models/orders-customer.model";
 import { db } from "@/db/client";
-import { and, asc, count, desc, eq, inArray, sql } from "drizzle-orm";
-import {
-  branch,
-  branchOrderDetail,
-  customerOrderDetail,
-  order,
-  user,
-} from "@/db/schema";
+import { and, asc, count, desc, eq, exists, inArray, sql } from "drizzle-orm";
+import { branchOrderDetail, customerOrderDetail, order } from "@/db/schema";
 import { notificationService } from "@/services/notification.service";
 import { AppError } from "@/utils/error";
 
@@ -230,31 +224,37 @@ export const ordersCustomerService = {
     const limit = query.limit ?? DEFAULT_LIMIT;
     const offset = query.offset ?? 0;
 
+    // Scoped by the branchId stamped on the order's own line items at
+    // create time — not the caller's current branch via a user join, which
+    // would silently re-scope an order if its cashier later moved branches.
     const where = and(
       eq(order.orderType, "customer"),
       query.status ? eq(order.status, query.status) : undefined,
-      eq(branch.branchId, branchId),
+      exists(
+        db
+          .select({ lotId: customerOrderDetail.lotId })
+          .from(customerOrderDetail)
+          .where(
+            and(
+              eq(customerOrderDetail.lotId, order.lotId),
+              eq(customerOrderDetail.branchId, branchId),
+            ),
+          ),
+      ),
     );
 
     const [rows, [{ totals }]] = await Promise.all([
       db
-        .select({ order, branchId: branch.branchId })
+        .select()
         .from(order)
-        .innerJoin(user, eq(user.id, order.userId))
-        .innerJoin(branch, eq(branch.branchId, user.branchId))
         .where(where)
         .orderBy(desc(order.createdAt), desc(order.lotId))
         .limit(limit)
         .offset(offset),
-      db
-        .select({ totals: count() })
-        .from(order)
-        .innerJoin(user, eq(user.id, order.userId))
-        .innerJoin(branch, eq(branch.branchId, user.branchId))
-        .where(where),
+      db.select({ totals: count() }).from(order).where(where),
     ]);
 
-    const lotIds = rows.map((row) => row.order.lotId);
+    const lotIds = rows.map((row) => row.lotId);
 
     const details = lotIds.length
       ? await db
@@ -277,9 +277,9 @@ export const ordersCustomerService = {
 
     return {
       orders: rows.map((row) => ({
-        ...row.order,
-        branchId: row.branchId,
-        items: itemsByLotId.get(row.order.lotId) ?? [],
+        ...row,
+        branchId,
+        items: itemsByLotId.get(row.lotId) ?? [],
       })),
       limit,
       offset,
