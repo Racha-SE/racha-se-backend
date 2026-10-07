@@ -254,7 +254,7 @@ describe("ordersCustomerService.create — qr", () => {
 
     expect(result.status).toBe("pending");
     expect(result.paymentUrl).toBe(
-      `/orders/customer/${result.lotId}/confirm-payment`,
+      `/api/v1/orders/customer/${result.lotId}/confirm-payment`,
     );
     // the reservation is real — this is the whole point of the redesign
     expect((await lotByBodId(bodId)).remain).toBe(6);

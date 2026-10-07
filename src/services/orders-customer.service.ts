@@ -391,7 +391,9 @@ export const ordersCustomerService = {
         ...newOrder,
         items: items.map(({ lotId: _lotId, bodId: _bodId, ...item }) => item),
         ...(body.paymentMethod === "qr"
-          ? { paymentUrl: `/orders/customer/${newOrder.lotId}/confirm-payment` }
+          ? {
+              paymentUrl: `/api/v1/orders/customer/${newOrder.lotId}/confirm-payment`,
+            }
           : {}),
       };
     });
