@@ -178,7 +178,7 @@ describe("POST /orders/customer", () => {
     expect(response.status).toBe(200);
     expect(body.data.status).toBe("pending");
     expect(body.data.paymentUrl).toBe(
-      `/orders/customer/${body.data.lotId}/confirm-payment`,
+      `/api/v1/orders/customer/${body.data.lotId}/confirm-payment`,
     );
   });
 
