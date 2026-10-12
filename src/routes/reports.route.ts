@@ -57,9 +57,10 @@ export const reportsRoute = new Elysia({ prefix: "/reports" })
   .get(
     "/",
     async ({ user, query }) => {
-      const _actor = toActor(user);
+      const actor = toActor(user);
       const { startDate, endDate, format } = query;
       const reportData = await reportsService.getSalesAndProfitReport(
+        actor,
         startDate,
         endDate,
       );

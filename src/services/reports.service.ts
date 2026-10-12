@@ -1,53 +1,100 @@
 import { db } from "@/db/client";
-import { and, eq, gte, lte } from "drizzle-orm";
+import { and, eq, gte, lte, sql } from "drizzle-orm";
 import {
   order,
   customerOrderDetail,
-  branchOrderDetail,
   product,
-  branch,
+  branchOrderDetail,
 } from "@/db/schema";
 import { endOfDay, startOfDay } from "date-fns";
-import { ReportResult } from "@/models/reports.model";
+import { type ReportResult } from "@/models/reports.model";
+import { type ScopedActor } from "@/utils";
 
 export const reportsService = {
   async getSalesAndProfitReport(
+    actor: ScopedActor,
     startDateStr: string,
     endDateStr: string,
   ): Promise<ReportResult[]> {
     const startDate = startOfDay(new Date(startDateStr));
     const endDate = endOfDay(new Date(endDateStr));
+    const { branchId } = actor;
 
-    const _rawData = await db
-      .select({
-        createdAt: order.createdAt,
-        branchName: branch.name,
-        orderId: order.lotId,
-        productName: product.name,
-        quantity: customerOrderDetail.quantity,
-        price: customerOrderDetail.price,
-        costPrice: branchOrderDetail.costPrice,
-      })
-      .from(order)
-      .innerJoin(
-        customerOrderDetail,
-        eq(order.lotId, customerOrderDetail.lotId),
-      )
-      .innerJoin(product, eq(customerOrderDetail.pId, product.pId))
-      .innerJoin(branch, eq(customerOrderDetail.branchId, branch.branchId))
-      .innerJoin(
-        branchOrderDetail,
-        eq(customerOrderDetail.bodId, branchOrderDetail.bodId),
-      )
-      .where(
-        and(
-          eq(order.orderType, "customer"),
-          eq(order.status, "completed"),
-          gte(order.createdAt, startDate),
-          lte(order.createdAt, endDate),
-        ),
-      );
+    const [purchased, sales] = await Promise.all([
+      // What the branch bought: received branch orders HQ approved in range,
+      // costed at the costPrice stamped on the line when it was ordered.
+      db
+        .select({
+          productId: product.pId,
+          productName: product.name,
+          quantity: sql<number>`coalesce(sum(${branchOrderDetail.amount}), 0)::int`,
+          totalCost: sql<number>`coalesce(sum(${branchOrderDetail.amount} * ${branchOrderDetail.costPrice}), 0)::int`,
+        })
+        .from(branchOrderDetail)
+        .innerJoin(order, eq(branchOrderDetail.lotId, order.lotId))
+        .innerJoin(product, eq(branchOrderDetail.pId, product.pId))
+        .where(
+          and(
+            branchId ? eq(branchOrderDetail.branchId, branchId) : undefined,
+            eq(order.orderType, "branch"),
+            eq(order.status, "completed"),
+            gte(order.approvedAt, startDate),
+            lte(order.approvedAt, endDate),
+          ),
+        )
+        .groupBy(product.pId),
 
-    return [];
+      // What the branch sold: paid customer orders placed in range, at the
+      // price stamped on each sale.
+      db
+        .select({
+          productId: product.pId,
+          productName: product.name,
+          salesQuantity: sql<number>`coalesce(sum(${customerOrderDetail.quantity}), 0)::int`,
+          totalRevenue: sql<number>`coalesce(sum(${customerOrderDetail.quantity} * ${customerOrderDetail.price}), 0)::int`,
+        })
+        .from(customerOrderDetail)
+        .innerJoin(order, eq(customerOrderDetail.lotId, order.lotId))
+        .innerJoin(product, eq(customerOrderDetail.pId, product.pId))
+        .where(
+          and(
+            branchId ? eq(customerOrderDetail.branchId, branchId) : undefined,
+            eq(order.orderType, "customer"),
+            eq(order.status, "completed"),
+            gte(order.createdAt, startDate),
+            lte(order.createdAt, endDate),
+          ),
+        )
+        .groupBy(product.pId),
+    ]);
+
+    // A product can show up on only one side: bought in range but not sold
+    // yet, or sold in range from stock bought before it.
+    const report = new Map<number, ReportResult>();
+
+    for (const row of purchased) {
+      report.set(row.productId, {
+        ...row,
+        salesQuantity: 0,
+        totalRevenue: 0,
+        totalProfit: -row.totalCost,
+      });
+    }
+
+    for (const row of sales) {
+      const quantity = report.get(row.productId)?.quantity ?? 0;
+      const totalCost = report.get(row.productId)?.totalCost ?? 0;
+
+      report.set(row.productId, {
+        ...row,
+        quantity,
+        totalCost,
+        totalProfit: row.totalRevenue - totalCost,
+      });
+    }
+
+    return Array.from(report.values()).sort(
+      (a, b) => a.productId - b.productId,
+    );
   },
 };
