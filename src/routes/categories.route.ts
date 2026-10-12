@@ -11,7 +11,7 @@ export const categoriesRoute = new Elysia({ prefix: "/categories" })
     "/",
     async () => successResponse({ result: await categoriesService.list() }),
     {
-      auth: ["hq", "branch"],
+      auth: ["hq", "branch", "cashier"],
       response: {
         200: tSuccessResponse(
           t.Object({ result: t.Array(CategoriesModel.entity) }),
@@ -31,7 +31,7 @@ export const categoriesRoute = new Elysia({ prefix: "/categories" })
     async ({ params: { id } }) =>
       successResponse({ result: await categoriesService.getById(id) }),
     {
-      auth: ["hq", "branch"],
+      auth: ["hq", "branch", "cashier"],
       params: CategoriesModel.params,
       response: {
         200: tSuccessResponse(t.Object({ result: CategoriesModel.entity })),
