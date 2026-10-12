@@ -7,21 +7,18 @@ import {
   product,
   branch,
 } from "@/db/schema";
-import type { SalesReportRow } from "@/models/reports.model";
 import { endOfDay, startOfDay } from "date-fns";
+import { ReportResult } from "@/models/reports.model";
 
 export const reportsService = {
   async getSalesAndProfitReport(
     startDateStr: string,
     endDateStr: string,
-  ): Promise<SalesReportRow[]> {
+  ): Promise<ReportResult[]> {
     const startDate = startOfDay(new Date(startDateStr));
     const endDate = endOfDay(new Date(endDateStr));
 
-    // Cost comes from the specific lot a sale actually drew from
-    // (branchOrderDetail.costPrice, via customerOrderDetail.bodId) — not
-    // product.price, which is the global selling price, not a cost at all.
-    const rawData = await db
+    const _rawData = await db
       .select({
         createdAt: order.createdAt,
         branchName: branch.name,
@@ -51,21 +48,6 @@ export const reportsService = {
         ),
       );
 
-    return rawData.map((row) => {
-      const totalSales = row.quantity * row.price;
-      const totalProfit = (row.price - row.costPrice) * row.quantity;
-
-      return {
-        date: row.createdAt.toISOString().split("T")[0],
-        branchName: row.branchName,
-        orderId: row.orderId,
-        productName: row.productName,
-        quantity: row.quantity,
-        unitPrice: row.price,
-        unitCost: row.costPrice,
-        totalSales,
-        totalProfit,
-      };
-    });
+    return [];
   },
 };
