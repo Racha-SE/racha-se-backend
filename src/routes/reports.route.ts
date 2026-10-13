@@ -98,13 +98,13 @@ export const reportsRoute = new Elysia({ prefix: "/reports" })
         500: tErrorResponse("INTERNAL_SERVER_ERROR"),
       },
       detail: {
-        summary: "List reports (searchable)",
+        summary: "Get Products Sales and Profit Report",
         description:
-          "Search/select an existing report to view. Filter by `search` (name) and/or `isActive`.",
+          "Get a report of products sold and profit made in a given date range, optionally filtered by branch. The report can be downloaded in CSV or XLSX format.",
         tags: ["Reports"],
         responses: {
           200: {
-            description: "Get Products Sales Report",
+            description: "Get Products Sales and Profit Report",
             content: {
               "text/csv": {
                 schema: { type: "string" },
