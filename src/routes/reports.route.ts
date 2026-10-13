@@ -58,11 +58,12 @@ export const reportsRoute = new Elysia({ prefix: "/reports" })
     "/",
     async ({ user, query }) => {
       const actor = toActor(user);
-      const { startDate, endDate, format } = query;
+      const { startDate, endDate, format, branchId } = query;
       const reportData = await reportsService.getSalesAndProfitReport(
         actor,
         startDate,
         endDate,
+        branchId,
       );
 
       switch (format) {
@@ -91,6 +92,8 @@ export const reportsRoute = new Elysia({ prefix: "/reports" })
       auth: READ_REPORT_TYPES,
       query: ReportQueryModel,
       response: {
+        403: tErrorResponse("FORBIDDEN"),
+        404: tErrorResponse("NOT_FOUND"),
         500: tErrorResponse("INTERNAL_SERVER_ERROR"),
       },
       detail: {

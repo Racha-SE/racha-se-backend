@@ -4,21 +4,36 @@ import {
   order,
   customerOrderDetail,
   product,
+  branch,
   branchOrderDetail,
 } from "@/db/schema";
 import { endOfDay, startOfDay } from "date-fns";
 import { type ReportResult } from "@/models/reports.model";
-import { type ScopedActor } from "@/utils";
+import { AppError, type ScopedActor } from "@/utils";
 
 export const reportsService = {
   async getSalesAndProfitReport(
     actor: ScopedActor,
     startDateStr: string,
     endDateStr: string,
+    branchSelectedId?: number,
   ): Promise<ReportResult[]> {
     const startDate = startOfDay(new Date(startDateStr));
     const endDate = endOfDay(new Date(endDateStr));
     const { branchId } = actor;
+
+    if (branchSelectedId !== undefined) {
+      const [existing] = await db
+        .select({ branchId: branch.branchId })
+        .from(branch)
+        .where(eq(branch.branchId, branchSelectedId));
+      if (!existing)
+        throw new AppError("NOT_FOUND", { branchId: branchSelectedId });
+    }
+
+    if (branchId && branchSelectedId && branchId !== branchSelectedId) {
+      throw new AppError("FORBIDDEN");
+    }
 
     const [purchased, sales] = await Promise.all([
       // What the branch bought: received branch orders HQ approved in range,
@@ -36,6 +51,9 @@ export const reportsService = {
         .where(
           and(
             branchId ? eq(branchOrderDetail.branchId, branchId) : undefined,
+            branchSelectedId
+              ? eq(branchOrderDetail.branchId, branchSelectedId)
+              : undefined,
             eq(order.orderType, "branch"),
             eq(order.status, "completed"),
             gte(order.approvedAt, startDate),
