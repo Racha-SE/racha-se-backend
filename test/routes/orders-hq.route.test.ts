@@ -69,7 +69,7 @@ function orderBody(item: {
   pId: number;
   supplierId?: number;
   amount?: number;
-  basePrice?: number;
+  costPrice?: number;
 }) {
   return {
     items: [
@@ -77,7 +77,7 @@ function orderBody(item: {
         supplierId: fixture.supplierId,
         amount: 1,
         expiredDate: daysFromNow(30).toISOString(),
-        basePrice: 0,
+        costPrice: 0,
         ...item,
       },
     ],
@@ -107,7 +107,7 @@ describe("POST /orders/hq", () => {
             supplierId: fixture.supplierId,
             amount: 6,
             expiredDate: expiredDate.toISOString(),
-            basePrice: 25,
+            costPrice: 25,
           },
         ],
       },
@@ -129,7 +129,7 @@ describe("POST /orders/hq", () => {
       supplierId: fixture.supplierId,
       amount: 6,
       remain: 6,
-      basePrice: 25,
+      costPrice: 25,
     });
     expect(new Date(body.data.items[0].expiredDate)).toEqual(expiredDate);
   });
@@ -200,7 +200,7 @@ describe("POST /orders/hq", () => {
   test("returns 400 when a line item is missing required fields", async () => {
     const pId = await fixture.createProduct();
 
-    // no supplierId, expiredDate or basePrice — all required by createBody
+    // no supplierId, expiredDate or costPrice — all required by createBody
     const response = await postOrder({ items: [{ pId, amount: 1 }] }, hqCookie);
     const body = (await response.json()) as ErrorBody;
 

@@ -29,7 +29,7 @@ function lineItem(item: Partial<LineItem> & Pick<LineItem, "pId">): LineItem {
     supplierId: fixture.supplierId,
     amount: 1,
     expiredDate: daysFromNow(30).toISOString(),
-    basePrice: 0,
+    costPrice: 0,
     ...item,
   };
 }
@@ -92,7 +92,7 @@ describe("ordersHqService.create", () => {
         pId,
         amount: 6,
         expiredDate: expiredDate.toISOString(),
-        basePrice: 25,
+        costPrice: 25,
       },
     ]);
 
@@ -103,7 +103,7 @@ describe("ordersHqService.create", () => {
       amount: 6,
       // nothing has been drawn from a brand new HQ lot yet
       remain: 6,
-      basePrice: 25,
+      costPrice: 25,
     });
     expect(result.items[0].expiredDate).toEqual(expiredDate);
     // the line item view omits lotId — it's already on the order above it
@@ -120,7 +120,7 @@ describe("ordersHqService.create", () => {
       supplierId: fixture.supplierId,
       amount: 6,
       remain: 6,
-      basePrice: 25,
+      costPrice: 25,
     });
   });
 
@@ -129,18 +129,18 @@ describe("ordersHqService.create", () => {
     const secondPId = await fixture.createProduct();
 
     const result = await createOrder([
-      { pId: firstPId, amount: 2, basePrice: 10 },
-      { pId: secondPId, amount: 3, basePrice: 20 },
+      { pId: firstPId, amount: 2, costPrice: 10 },
+      { pId: secondPId, amount: 3, costPrice: 20 },
     ]);
 
     expect(result.items).toHaveLength(2);
     expect(result.items.find(({ pId }) => pId === firstPId)).toMatchObject({
       amount: 2,
-      basePrice: 10,
+      costPrice: 10,
     });
     expect(result.items.find(({ pId }) => pId === secondPId)).toMatchObject({
       amount: 3,
-      basePrice: 20,
+      costPrice: 20,
     });
   });
 

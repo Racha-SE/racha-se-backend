@@ -22,7 +22,7 @@ const lineItem = t.Object({
       return date;
     })
     .Encode((date) => date),
-  basePrice: t.Number({ minimum: 0 }),
+  costPrice: t.Number({ minimum: 0 }),
 });
 
 const lineItemView = t.Omit(headOrderEntity, ["lotId"]);

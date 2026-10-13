@@ -127,7 +127,7 @@ describe("ordersCustomerService.create — cash", () => {
       pId,
       remain: 10,
       expiredDate: daysFromNow(30),
-      basePrice: 25,
+      costPrice: 25,
     });
 
     const result = await createOrder("cash", [{ pId, quantity: 4 }]);
@@ -136,7 +136,8 @@ describe("ordersCustomerService.create — cash", () => {
     expect(result.status).toBe("completed");
     expect(result.userId).toBe(fixture.cashierUser.id);
     expect(result.items).toHaveLength(1);
-    expect(result.items[0]).toMatchObject({ pId, quantity: 4, basePrice: 25 });
+    // charges the product's price (10, global), not the lot's cost (25)
+    expect(result.items[0]).toMatchObject({ pId, quantity: 4, price: 10 });
     expect(result.items[0]).not.toHaveProperty("lotId");
     expect(result.items[0]).not.toHaveProperty("bodId");
     expect(result).not.toHaveProperty("paymentUrl");
@@ -145,18 +146,18 @@ describe("ordersCustomerService.create — cash", () => {
   });
 
   test("draws stock down lot by lot, nearest expiry first, producing one row per lot", async () => {
-    const pId = await fixture.createProduct();
+    const pId = await fixture.createProduct(12);
     const nearest = await fixture.createBranchStock({
       pId,
       remain: 3,
       expiredDate: daysFromNow(10),
-      basePrice: 20,
+      costPrice: 20,
     });
     const later = await fixture.createBranchStock({
       pId,
       remain: 10,
       expiredDate: daysFromNow(60),
-      basePrice: 30,
+      costPrice: 30,
     });
 
     const result = await createOrder("cash", [{ pId, quantity: 5 }]);
@@ -166,13 +167,14 @@ describe("ordersCustomerService.create — cash", () => {
 
     // unlike orders-branch's single collapsed row, a multi-lot line becomes
     // two customer_order_detail rows here — one per lot actually drawn from,
-    // so cancel can restore each exactly.
+    // so cancel can restore each exactly. Both rows charge the same product
+    // price (12) despite the lots having different costs (20 vs 30).
     expect(result.items).toHaveLength(2);
-    expect(result.items.find((item) => item.basePrice === 20)).toMatchObject({
-      quantity: 3,
+    expect(result.items.find((item) => item.quantity === 3)).toMatchObject({
+      price: 12,
     });
-    expect(result.items.find((item) => item.basePrice === 30)).toMatchObject({
-      quantity: 2,
+    expect(result.items.find((item) => item.quantity === 2)).toMatchObject({
+      price: 12,
     });
   });
 

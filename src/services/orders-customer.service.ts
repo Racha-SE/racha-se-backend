@@ -27,7 +27,6 @@ interface DrawableLot {
   bodId: number;
   remain: number;
   expiredDate: Date | null;
-  basePrice: number;
 }
 
 interface LineDraw {
@@ -35,7 +34,9 @@ interface LineDraw {
   bodId: number;
   amount: number;
   expiredDate: Date;
-  basePrice: number;
+  // product.price at sale time, not the drawn lot's cost — every branch
+  // charges the same price regardless of which lot FEFO happens to draw.
+  price: number;
 }
 
 // Own lock helper, not shared with orders-branch.service.ts's lockOrder —
@@ -131,6 +132,7 @@ async function loadDrawableLots(
 function drawFefoLines(
   lines: { pId: number; quantity: number }[],
   lotsByProduct: Map<number, DrawableLot[]>,
+  priceByPId: Map<number, number>,
 ): LineDraw[] {
   const draws: LineDraw[] = [];
 
@@ -144,6 +146,15 @@ function drawFefoLines(
         pId: line.pId,
         requested: line.quantity,
         availableAmount,
+      });
+    }
+
+    const price = priceByPId.get(line.pId);
+    if (price === undefined) {
+      // create() already validated every line's pId against an active
+      // product before this runs, so this is unreachable in practice.
+      throw new AppError("INTERNAL_SERVER_ERROR", {
+        message: "price missing for a validated product",
       });
     }
 
@@ -167,7 +178,7 @@ function drawFefoLines(
         bodId: lot.bodId,
         amount: drawn,
         expiredDate: lot.expiredDate,
-        basePrice: lot.basePrice,
+        price,
       });
     }
   }
@@ -341,11 +352,12 @@ export const ordersCustomerService = {
     const now = new Date();
 
     const products = await db.query.product.findMany({
-      columns: { pId: true },
+      columns: { pId: true, price: true },
       where: (product, { inArray, and, eq }) =>
         and(inArray(product.pId, pIds), eq(product.isActive, true)),
     });
     const activeProductIds = new Set(products.map((p) => p.pId));
+    const priceByPId = new Map(products.map((p) => [p.pId, p.price]));
     for (const pId of pIds) {
       if (!activeProductIds.has(pId)) {
         throw new AppError("NOT_FOUND", { message: "Product not found" });
@@ -355,7 +367,7 @@ export const ordersCustomerService = {
     return db.transaction(async (tx) => {
       await lockBranchStock(tx, branchId, pIds);
       const lotsByProduct = await loadDrawableLots(tx, branchId, pIds, now);
-      const draws = drawFefoLines(body.items, lotsByProduct);
+      const draws = drawFefoLines(body.items, lotsByProduct, priceByPId);
 
       await applyBranchStockDeduction(tx, draws, now);
 
@@ -382,7 +394,7 @@ export const ordersCustomerService = {
             quantity: draw.amount,
             branchId,
             expiredDate: draw.expiredDate,
-            basePrice: draw.basePrice,
+            price: draw.price,
           })),
         )
         .returning();

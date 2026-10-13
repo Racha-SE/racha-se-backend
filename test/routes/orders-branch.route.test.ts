@@ -140,8 +140,8 @@ describe("POST /orders/branch", () => {
       branchId: fixture.branchId,
       amount: 4,
       remain: 0,
-      costPrice: 15,
-      basePrice: 0,
+      price: 15,
+      costPrice: 0,
     });
   });
 
@@ -213,7 +213,7 @@ describe("PATCH /orders/branch/:lotId/approve", () => {
   test("returns the approved order and its filled line items", async () => {
     const pId = await fixture.createProduct(15);
     const expiredDate = daysFromNow(30);
-    await fixture.createHqLot({ pId, remain: 10, expiredDate, basePrice: 40 });
+    await fixture.createHqLot({ pId, remain: 10, expiredDate, costPrice: 40 });
     const lotId = await requestOrder(pId, 4);
 
     const response = await patchApprove(lotId, hqCookie);
@@ -233,7 +233,7 @@ describe("PATCH /orders/branch/:lotId/approve", () => {
       pId,
       amount: 4,
       remain: 4,
-      basePrice: 40,
+      costPrice: 40,
     });
   });
 

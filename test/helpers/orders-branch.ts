@@ -31,7 +31,8 @@ export interface HqLotInput {
   /** stock this lot can still hand out — what `create` draws against */
   remain: number;
   expiredDate: Date;
-  basePrice?: number;
+  /** what HQ actually paid the supplier for this lot */
+  costPrice?: number;
   /**
    * status of the *order* the lot hangs off. Only "approved" lots are
    * drawable, so the other two exist to prove they're skipped.
@@ -40,7 +41,8 @@ export interface HqLotInput {
 }
 
 export interface ProductInput {
-  costPrice?: number;
+  /** the product's global selling price, same at every branch */
+  price?: number;
   /** HQ's low-stock threshold — what an HQ min_stock alert is judged against */
   minStockHq?: number;
   /** the branch's low-stock threshold — what clears its min_stock alert */
@@ -157,17 +159,17 @@ export async function setupOrdersBranchFixture(
 
     async createProduct(input = 0) {
       const {
-        costPrice = 0,
+        price = 0,
         minStockHq = 0,
         minStockBranch = 0,
-      } = typeof input === "number" ? { costPrice: input } : input;
+      } = typeof input === "number" ? { price: input } : input;
       const suffix = crypto.randomUUID();
       const [created] = await db
         .insert(product)
         .values({
           name: `${label} Product ${suffix}`,
           barcode: suffix,
-          costPrice,
+          price,
           minStockHq,
           minStockBranch,
         })
@@ -181,7 +183,7 @@ export async function setupOrdersBranchFixture(
       pId,
       remain,
       expiredDate,
-      basePrice = 0,
+      costPrice = 0,
       status = "approved",
     }) {
       const [createdOrder] = await db
@@ -198,7 +200,7 @@ export async function setupOrdersBranchFixture(
         expiredDate,
         supplierId: createdSupplier.supplierId,
         pId,
-        basePrice,
+        costPrice,
       });
 
       return { lotId: createdOrder.lotId };

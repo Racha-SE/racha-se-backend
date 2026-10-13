@@ -63,7 +63,7 @@ export const ordersHqService = {
           expiredDate: new Date(item.expiredDate),
           supplierId: item.supplierId,
           pId: item.pId,
-          basePrice: item.basePrice,
+          costPrice: item.costPrice,
         };
       });
 

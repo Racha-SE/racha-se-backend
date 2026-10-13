@@ -30,7 +30,8 @@ export interface TestUser {
 export interface ProductInput {
   /** the HQ threshold a min_stock alert is judged against */
   minStockHq?: number;
-  costPrice?: number;
+  /** the product's global selling price, same at every branch */
+  price?: number;
   isActive?: boolean;
 }
 
@@ -141,7 +142,7 @@ export async function setupOrdersHqFixture(
 
     async createProduct({
       minStockHq = 0,
-      costPrice = 0,
+      price = 0,
       isActive = true,
     }: ProductInput = {}) {
       const suffix = crypto.randomUUID();
@@ -151,7 +152,7 @@ export async function setupOrdersHqFixture(
           name: `${label} Product ${suffix}`,
           barcode: suffix,
           minStockHq,
-          costPrice,
+          price,
           isActive,
         })
         .returning({ pId: product.pId });
@@ -175,7 +176,7 @@ export async function setupOrdersHqFixture(
         expiredDate,
         supplierId: createdSupplier.supplierId,
         pId,
-        basePrice: 0,
+        costPrice: 0,
       });
 
       return { lotId: createdOrder.lotId };

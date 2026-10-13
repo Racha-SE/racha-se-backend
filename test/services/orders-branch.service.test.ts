@@ -96,10 +96,10 @@ describe("ordersBranchService.create", () => {
       branchId: fixture.branchId,
       amount: 4,
       // a pending request is not branch stock, and the lot it will be filled
-      // from isn't picked yet, so remain/basePrice/expiredDate stay empty
+      // from isn't picked yet, so remain/costPrice/expiredDate stay empty
       remain: 0,
-      costPrice: 15,
-      basePrice: 0,
+      price: 15,
+      costPrice: 0,
     });
     expect(result.items[0].expiredDate).toBeNull();
     // createResponse omits lotId from the line items — it's already on the
@@ -132,11 +132,11 @@ describe("ordersBranchService.create", () => {
     expect(result.items).toHaveLength(2);
     expect(result.items.find(({ pId }) => pId === firstPId)).toMatchObject({
       amount: 2,
-      costPrice: 10,
+      price: 10,
     });
     expect(result.items.find(({ pId }) => pId === secondPId)).toMatchObject({
       amount: 3,
-      costPrice: 20,
+      price: 20,
     });
   });
 
@@ -243,7 +243,7 @@ describe("ordersBranchService.approve", () => {
       pId,
       remain: 10,
       expiredDate,
-      basePrice: 40,
+      costPrice: 40,
     });
     const requested = await createOrder([{ pId, amount: 4 }]);
 
@@ -259,8 +259,8 @@ describe("ordersBranchService.approve", () => {
       amount: 4,
       // the branch holds these now, priced and dated by the lot they came from
       remain: 4,
-      basePrice: 40,
-      costPrice: 15,
+      costPrice: 40,
+      price: 15,
     });
     expect(result.items[0].expiredDate).toEqual(expiredDate);
 
@@ -274,13 +274,13 @@ describe("ordersBranchService.approve", () => {
       pId,
       remain: 3,
       expiredDate: daysFromNow(10),
-      basePrice: 40,
+      costPrice: 40,
     });
     const later = await fixture.createHqLot({
       pId,
       remain: 10,
       expiredDate: daysFromNow(60),
-      basePrice: 55,
+      costPrice: 55,
     });
     const requested = await createOrder([{ pId, amount: 5 }]);
 
@@ -629,7 +629,7 @@ describe("ordersBranchService.receive", () => {
   test("the received line holds the quantity, expiry and prices of what arrived", async () => {
     const pId = await fixture.createProduct(15);
     const expiredDate = daysFromNow(30);
-    await fixture.createHqLot({ pId, remain: 10, expiredDate, basePrice: 40 });
+    await fixture.createHqLot({ pId, remain: 10, expiredDate, costPrice: 40 });
     const created = await approvedOrder([{ pId, amount: 4 }]);
 
     await ordersBranchService.receive(created.lotId, fixture.branchId);
@@ -646,8 +646,8 @@ describe("ordersBranchService.receive", () => {
       amount: 4,
       // nothing has been sold out of it yet, so all 4 are on the shelf
       remain: 4,
-      costPrice: 15,
-      basePrice: 40,
+      price: 15,
+      costPrice: 40,
     });
     expect(lines[0].expiredDate).toEqual(expiredDate);
   });

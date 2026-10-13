@@ -237,7 +237,7 @@ export const ordersBranchService = {
       const products = await tx.query.product.findMany({
         columns: {
           pId: true,
-          costPrice: true,
+          price: true,
         },
         where: (product, { inArray, and, eq }) =>
           and(inArray(product.pId, pIds), eq(product.isActive, true)),
@@ -262,9 +262,9 @@ export const ordersBranchService = {
           amount: item.amount,
           branchId,
           // the branch holds none of this yet - remain, expiredDate and
-          // basePrice are filled in once the order is approved and received
+          // costPrice are filled in once the order is approved and received
           remain: 0,
-          costPrice: product.costPrice,
+          price: product.price,
         };
       });
 
@@ -392,10 +392,10 @@ export const ordersBranchService = {
         return {
           bodId: line.bodId,
           // the line stays one row even when it spans lots, so the expiry and
-          // price it carries are the nearest-expiry lot's
+          // cost it carries are the nearest-expiry lot's
           remain: line.amount,
           expiredDate: drawnFrom[0].expiredDate,
-          basePrice: drawnFrom[0].basePrice,
+          costPrice: drawnFrom[0].costPrice,
         };
       });
 
@@ -418,16 +418,16 @@ export const ordersBranchService = {
         update ${branchOrderDetail}
         set ${sql.identifier("remain")} = v.remain,
             ${sql.identifier("expired_date")} = v.expired_date,
-            ${sql.identifier("base_price")} = v.base_price,
+            ${sql.identifier("cost_price")} = v.cost_price,
             ${sql.identifier("updated_at")} = ${utcTimestamp(now)}
         from (values ${sql.join(
           filledLines.map(
-            ({ bodId, remain, expiredDate, basePrice }) =>
-              sql`(${bodId}::int, ${remain}::int, ${utcTimestamp(expiredDate)}, ${basePrice}::int)`,
+            ({ bodId, remain, expiredDate, costPrice }) =>
+              sql`(${bodId}::int, ${remain}::int, ${utcTimestamp(expiredDate)}, ${costPrice}::int)`,
           ),
           sql`, `,
         )})
-          as v(bod_id, remain, expired_date, base_price)
+          as v(bod_id, remain, expired_date, cost_price)
           where ${branchOrderDetail.bodId} = v.bod_id
         `);
 

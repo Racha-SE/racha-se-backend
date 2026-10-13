@@ -56,7 +56,9 @@ export const headOrderDetail = pgTable(
     pId: integer("p_id")
       .notNull()
       .references(() => product.pId),
-    basePrice: integer("base_price").notNull().default(0),
+    // What HQ actually paid the supplier for this lot — not the product's
+    // selling price, which is global (see product.price).
+    costPrice: integer("cost_price").notNull().default(0),
     ...timestamps(),
   },
   (table) => ({
@@ -91,7 +93,9 @@ export const customerOrderDetail = pgTable(
     pId: integer("p_id")
       .notNull()
       .references(() => product.pId),
-    basePrice: integer("unit_price").notNull().default(0),
+    // What the customer actually paid per unit — product.price at the time
+    // of sale, not the lot's cost.
+    price: integer("unit_price").notNull().default(0),
     // Which branchOrderDetail lot this row was drawn from — lets cancel()
     // credit back the exact lot, not one picked fresh by a second FEFO pass.
     bodId: integer("bod_id")
@@ -124,8 +128,12 @@ export const branchOrderDetail = pgTable(
     pId: integer("p_id")
       .notNull()
       .references(() => product.pId),
-    basePrice: integer("base_price").notNull().default(0),
+    // The lot's actual cost — copied from the HQ lot's costPrice once HQ
+    // approves and fills this request (see orders-branch.service.ts).
     costPrice: integer("cost_price").notNull().default(0),
+    // A snapshot of product.price taken when the branch requested this lot
+    // — kept for historical display even if the global price changes later.
+    price: integer("price").notNull().default(0),
     ...timestamps(),
   },
   (table) => ({

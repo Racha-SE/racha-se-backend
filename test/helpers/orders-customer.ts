@@ -29,12 +29,15 @@ export interface BranchStockInput {
   /** stock this lot can still hand out — what `create` draws against */
   remain: number;
   expiredDate: Date | null;
-  basePrice?: number;
+  /** what this lot actually cost the branch, copied from HQ at approval */
   costPrice?: number;
+  /** a snapshot of product.price taken when the branch requested the lot */
+  price?: number;
 }
 
 export interface ProductInput {
-  costPrice?: number;
+  /** the product's global selling price, same at every branch */
+  price?: number;
   minStockHq?: number;
   minStockBranch?: number;
 }
@@ -138,17 +141,17 @@ export async function setupOrdersCustomerFixture(
 
     async createProduct(input = 0) {
       const {
-        costPrice = 0,
+        price = 0,
         minStockHq = 0,
         minStockBranch = 0,
-      } = typeof input === "number" ? { costPrice: input } : input;
+      } = typeof input === "number" ? { price: input } : input;
       const suffix = crypto.randomUUID();
       const [created] = await db
         .insert(product)
         .values({
           name: `${label} Product ${suffix}`,
           barcode: suffix,
-          costPrice,
+          price,
           minStockHq,
           minStockBranch,
         })
@@ -162,8 +165,8 @@ export async function setupOrdersCustomerFixture(
       pId,
       remain,
       expiredDate,
-      basePrice = 0,
       costPrice = 0,
+      price = 0,
     }) {
       const [createdOrder] = await db
         .insert(order)
@@ -185,8 +188,8 @@ export async function setupOrdersCustomerFixture(
           expiredDate,
           branchId: createdBranch.branchId,
           pId,
-          basePrice,
           costPrice,
+          price,
         })
         .returning({ bodId: branchOrderDetail.bodId });
 
