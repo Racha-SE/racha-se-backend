@@ -81,7 +81,7 @@ function productBody(overrides: Record<string, unknown> = {}) {
     description: "A product used for route tests",
     minStockHq: 5,
     minStockBranch: 2,
-    costPrice: 1000,
+    price: 1000,
     isActive: true,
     ...overrides,
   };
@@ -231,8 +231,8 @@ describe("POST /products", () => {
     expect(response.status).toBe(403);
   });
 
-  test("returns 400 for a negative costPrice", async () => {
-    const response = await createProduct(hqCookie, { costPrice: -1 });
+  test("returns 400 for a negative price", async () => {
+    const response = await createProduct(hqCookie, { price: -1 });
     const body = (await response.json()) as ErrorBody;
 
     expect(response.status).toBe(400);
@@ -295,14 +295,14 @@ describe("PATCH /products/:id", () => {
       new Request(`http://localhost/products/${createdBody.data.pId}`, {
         method: "PATCH",
         headers: authHeaders(hqCookie),
-        body: JSON.stringify({ name: newName, costPrice: 2000 }),
+        body: JSON.stringify({ name: newName, price: 2000 }),
       }),
     );
     const body = (await response.json()) as SuccessBody<Product>;
 
     expect(response.status).toBe(200);
     expect(body.data.name).toBe(newName);
-    expect(body.data.costPrice).toBe(2000);
+    expect(body.data.price).toBe(2000);
   });
 
   test("returns 403 for a non-hq userType (cashier)", async () => {
@@ -594,11 +594,11 @@ describe("product categories", () => {
       })
     ).json()) as SuccessBody<Product>;
 
-    const response = await patchProduct(created.data.pId, { costPrice: 1234 });
+    const response = await patchProduct(created.data.pId, { price: 1234 });
     const body = (await response.json()) as SuccessBody<Product>;
 
     expect(response.status).toBe(200);
-    expect(body.data.costPrice).toBe(1234);
+    expect(body.data.price).toBe(1234);
     expect(body.data.categories).toEqual([firstCategory]);
   });
 

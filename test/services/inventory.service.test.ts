@@ -2,10 +2,6 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { inArray } from "drizzle-orm";
 import { db } from "@/db/client";
 import { productCategory, productCategoryMap } from "@/db/schema";
-import type {
-  HqInventoryGroupByProduct,
-  HqInventoryItem,
-} from "@/models/inventory.model";
 import type { ProductCategoryRef } from "@/models/products.model";
 import { inventoryService } from "@/services/inventory.service";
 import type { ScopedActor } from "@/utils";
@@ -79,9 +75,7 @@ describe("inventoryService.getHqStock — categories", () => {
       categoryId: secondCategory.categoryId,
       limit: 100,
     });
-    const row = (result.inventory as HqInventoryItem[]).find(
-      (item) => item.pId === bothPId,
-    );
+    const row = result.inventory.find((item) => item.pId === bothPId);
 
     expect(row?.categories).toEqual([firstCategory, secondCategory]);
     // the older names-only field is still there, in the same order
@@ -91,29 +85,15 @@ describe("inventoryService.getHqStock — categories", () => {
     ]);
   });
 
-  test("grouped rows carry the same category fields", async () => {
-    const result = await inventoryService.getHqStock(hqActor, {
-      categoryId: secondCategory.categoryId,
-      groupBy: true,
-      limit: 100,
-    });
-    const row = (result.inventory as HqInventoryGroupByProduct[]).find(
-      (item) => item.pId === secondOnlyPId,
-    );
-
-    expect(row?.categories).toEqual([secondCategory]);
-    expect(row?.productCategory).toEqual([secondCategory.categoryName]);
-  });
-
   test("categoryId filters to products linked to that category", async () => {
     const result = await inventoryService.getHqStock(hqActor, {
       categoryId: firstCategory.categoryId,
-      groupBy: true,
       limit: 100,
     });
     const pIds = result.inventory.map((item) => item.pId);
 
     expect(pIds).toEqual([bothPId]);
+    expect(pIds).not.toContain(secondOnlyPId);
     expect(result.totalCount).toBe(1);
   });
 });

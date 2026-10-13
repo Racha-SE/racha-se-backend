@@ -17,7 +17,9 @@ export const product = pgTable("product", {
   minStockHq: integer("min_stock_hq").notNull().default(0),
   minStockBranch: integer("min_stock_branch").notNull().default(0),
   isActive: boolean("is_active").notNull().default(true),
-  costPrice: integer("cost_price").notNull().default(0),
+  // The selling price, same at every branch — not a cost. Each lot's actual
+  // cost lives on head_order_detail/branch_order_detail instead.
+  price: integer("price").notNull().default(0),
   ...timestamps(),
 });
 

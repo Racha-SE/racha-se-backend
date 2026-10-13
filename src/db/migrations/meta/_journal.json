@@ -127,6 +127,13 @@
       "when": 1790417933762,
       "tag": "0017_messy_screwball",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1791866742809,
+      "tag": "0018_rename_price_fields",
+      "breakpoints": true
     }
   ]
 }

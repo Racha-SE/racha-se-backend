@@ -2,8 +2,7 @@ import { Elysia } from "elysia";
 import { authPlugin } from "@/plugins/auth.plugin";
 import {
   InventoryModel,
-  branchStockResponse,
-  branchNearExpiryResponse,
+  getBranchInventoryResponse,
 } from "@/models/inventory.model";
 import { inventoryService } from "@/services/inventory.service";
 import {
@@ -39,46 +38,20 @@ export const inventoryRoute = new Elysia({ prefix: "/inventory" })
   // --- ฝั่ง Branch ---
   .get(
     "/branches/:branchId",
-    async ({ params: { branchId } }) =>
-      successResponse({
-        result: await inventoryService.getBranchStock(branchId),
-      }),
+    async ({ params: { branchId }, query }) =>
+      successResponse(await inventoryService.getBranchStock(branchId, query)),
     {
       auth: true,
       params: InventoryModel.branchParams,
-      response: branchStockResponse,
+      query: InventoryModel.getBranchInventoryQuery,
+      response: getBranchInventoryResponse,
       detail: {
-        summary: "View a branch's real-time stock",
+        summary: "View a branch's real-time stock (searchable)",
+        description:
+          "Same shape as GET /inventory/hq, scoped to one branch. " +
+          "`groupBy=false` (default) lists lots; `groupBy=true` collapses " +
+          "them into one on-hand total per product for a cashier.",
         tags: ["Inventory"],
       },
-    },
-  )
-  .get(
-    "/branches/:branchId/low-stock",
-    async ({ params: { branchId } }) =>
-      successResponse({
-        result: await inventoryService.listBranchLowStock(branchId),
-      }),
-    {
-      auth: true,
-      params: InventoryModel.branchParams,
-      response: branchStockResponse,
-      detail: {
-        summary: "List branch products below minimum stock",
-        tags: ["Inventory"],
-      },
-    },
-  )
-  .get(
-    "/branches/:branchId/near-expiry",
-    async ({ params: { branchId } }) =>
-      successResponse({
-        result: await inventoryService.listBranchNearExpiry(branchId),
-      }),
-    {
-      auth: true,
-      params: InventoryModel.branchParams,
-      response: branchNearExpiryResponse, //ใช้ nearExpiryResponse
-      detail: { summary: "List branch near-expiry items", tags: ["Inventory"] },
     },
   );
