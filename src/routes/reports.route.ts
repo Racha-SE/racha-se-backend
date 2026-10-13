@@ -15,6 +15,10 @@ function convertToCSV(salesData: ReportResult[]) {
     fields: [
       { label: "Product ID", value: "productId" },
       { label: "Product Name", value: "productName" },
+      {
+        label: "Categories",
+        value: (row: ReportResult) => row.categories.join(", "),
+      },
       { label: "Quantity", value: "quantity" },
       { label: "Sales Quantity", value: "salesQuantity" },
       { label: "Unit Price", value: "unitPrice" },
@@ -35,6 +39,7 @@ async function convertToXLSX(salesData: ReportResult[]) {
   ws.columns = [
     { header: "Product ID", key: "productId", width: 15 },
     { header: "Product Name", key: "productName", width: 30 },
+    { header: "Categories", key: "categories", width: 30 },
     { header: "Quantity", key: "quantity", width: 10 },
     { header: "Sales Quantity", key: "salesQuantity", width: 15 },
     { header: "Unit Price", key: "unitPrice", width: 15 },
@@ -45,7 +50,7 @@ async function convertToXLSX(salesData: ReportResult[]) {
   ];
 
   salesData.forEach((data) => {
-    ws.addRow(data);
+    ws.addRow({ ...data, categories: data.categories.join(", ") });
   });
 
   const buf = await wb.xlsx.writeBuffer();

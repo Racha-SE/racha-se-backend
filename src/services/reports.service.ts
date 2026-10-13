@@ -10,6 +10,7 @@ import {
 import { endOfDay, startOfDay } from "date-fns";
 import { type ReportResult } from "@/models/reports.model";
 import { AppError, type ScopedActor } from "@/utils";
+import { categoriesFor } from "@/services/products.service";
 
 export const reportsService = {
   async getSalesAndProfitReport(
@@ -88,7 +89,7 @@ export const reportsService = {
 
     // A product can show up on only one side: bought in range but not sold
     // yet, or sold in range from stock bought before it.
-    const report = new Map<number, ReportResult>();
+    const report = new Map<number, Omit<ReportResult, "categories">>();
 
     for (const row of purchased) {
       report.set(row.productId, {
@@ -111,8 +112,18 @@ export const reportsService = {
       });
     }
 
-    return Array.from(report.values()).sort(
+    const rows = Array.from(report.values()).sort(
       (a, b) => a.productId - b.productId,
     );
+    const categoriesByProduct = await categoriesFor(
+      rows.map((row) => row.productId),
+    );
+
+    return rows.map((row) => ({
+      ...row,
+      categories: (categoriesByProduct.get(row.productId) ?? []).map(
+        ({ categoryName }) => categoryName,
+      ),
+    }));
   },
 };

@@ -10,6 +10,7 @@ export const ReportQueryModel = t.Object({
 export const ReportResult = t.Object({
   productId: t.Integer(),
   productName: t.String(),
+  categories: t.Array(t.String()),
   quantity: t.Integer({ minimum: 0 }),
   salesQuantity: t.Integer({ minimum: 0 }),
   totalRevenue: t.Number({ minimum: 0 }),
