@@ -12,7 +12,7 @@ import {
   inArray,
   or,
   sum,
-  sql,
+  isNull,
   type SQL,
 } from "drizzle-orm";
 import { db } from "@/db/client";
@@ -56,7 +56,10 @@ function branchOnHandLots(): SQL | undefined {
   return and(
     eq(order.status, "completed"),
     gt(branchOrderDetail.remain, 0),
-    sql`(${branchOrderDetail.expiredDate} IS NULL OR ${branchOrderDetail.expiredDate} > NOW())`,
+    or(
+      isNull(branchOrderDetail.expiredDate),
+      gt(branchOrderDetail.expiredDate, new Date()),
+    ),
   );
 }
 
