@@ -12,6 +12,7 @@ import {
   inArray,
   or,
   sum,
+  sql,
   type SQL,
 } from "drizzle-orm";
 import { db } from "@/db/client";
@@ -48,6 +49,14 @@ function onHandLots(): SQL | undefined {
     eq(order.orderType, "hq"),
     eq(order.status, "approved"),
     gt(headOrderDetail.remain, 0),
+  );
+}
+
+function branchOnHandLots(): SQL | undefined {
+  return and(
+    eq(order.status, "completed"),
+    gt(branchOrderDetail.remain, 0),
+    sql`(${branchOrderDetail.expiredDate} IS NULL OR ${branchOrderDetail.expiredDate} > NOW())`,
   );
 }
 
@@ -341,7 +350,8 @@ export const inventoryService = {
       // Ungrouped is a list of lots, not of products: every on-hand
       // branch_order_detail row stands on its own, so a product shows up once
       // per lot it still has, and limit/offset page over lots.
-      const lotWhere = and(gt(branchOrderDetail.remain, 0), ...conditions);
+
+      const lotWhere = and(branchOnHandLots(), ...conditions);
 
       const [rows, [{ totalCount }]] = await Promise.all([
         db
@@ -357,6 +367,7 @@ export const inventoryService = {
           })
           .from(branchOrderDetail)
           .innerJoin(product, eq(product.pId, branchOrderDetail.pId))
+          .innerJoin(order, eq(order.lotId, branchOrderDetail.lotId))
           .where(lotWhere)
           .orderBy(
             ...(sortBy ? [direction(sortBy)] : []),
@@ -370,6 +381,7 @@ export const inventoryService = {
           .select({ totalCount: count() })
           .from(branchOrderDetail)
           .innerJoin(product, eq(product.pId, branchOrderDetail.pId))
+          .innerJoin(order, eq(order.lotId, branchOrderDetail.lotId))
           .where(lotWhere),
       ]);
 
@@ -399,7 +411,8 @@ export const inventoryService = {
     // remain summed into a single total. Ordered by pId (not sortOption,
     // same as getHqStock's grouped mode) since there's no per-lot price or
     // expiry left to sort by once they're collapsed.
-    const productWhere = and(...conditions);
+
+    const productWhere = and(branchOnHandLots(), ...conditions);
 
     const [rows, [{ totalCount }]] = await Promise.all([
       db
@@ -413,6 +426,7 @@ export const inventoryService = {
         })
         .from(branchOrderDetail)
         .innerJoin(product, eq(product.pId, branchOrderDetail.pId))
+        .innerJoin(order, eq(order.lotId, branchOrderDetail.lotId))
         .where(productWhere)
         .groupBy(
           product.pId,
@@ -428,6 +442,7 @@ export const inventoryService = {
         .select({ totalCount: countDistinct(product.pId) })
         .from(branchOrderDetail)
         .innerJoin(product, eq(product.pId, branchOrderDetail.pId))
+        .innerJoin(order, eq(order.lotId, branchOrderDetail.lotId))
         .where(productWhere),
     ]);
 

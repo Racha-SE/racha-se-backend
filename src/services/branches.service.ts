@@ -2,6 +2,7 @@ import { eq } from "drizzle-orm";
 import { db } from "@/db/client";
 import { branch } from "@/db/schema";
 import { AppError } from "@/utils";
+import { postgresError } from "@/utils/db-error";
 import type {
   CreateBranchBody,
   UpdateBranchBody,
@@ -25,21 +26,11 @@ export const branchesService = {
   },
 
   async create(data: CreateBranchBody) {
-    const [existing] = await db
-      .select()
-      .from(branch)
-      .where(eq(branch.name, data.name));
-
-    if (existing) {
-      throw new AppError("ALREADY_EXISTS");
-    }
-
     try {
       const [created] = await db.insert(branch).values(data).returning();
       return created;
     } catch (error: unknown) {
-      const err = error as { code?: string };
-      if (err.code === "23505") {
+      if (postgresError(error)?.errno === "23505") {
         throw new AppError("ALREADY_EXISTS");
       }
       throw error;
@@ -56,8 +47,7 @@ export const branchesService = {
         .returning();
       return updated;
     } catch (error: unknown) {
-      const err = error as { code?: string };
-      if (err.code === "23505") {
+      if (postgresError(error)?.errno === "23505") {
         throw new AppError("ALREADY_EXISTS");
       }
       throw error;
