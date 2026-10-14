@@ -24,9 +24,6 @@ const productCategoryNames = t.Array(t.String(), {
 });
 const categories = t.Array(ProductsModel.categoryRef);
 
-// HQ has no groupBy — it's always one row per on-hand lot, so a manager sees
-// every price/expiry it carries. Branch keeps groupBy for its cashier mode
-// (see BranchInventoryGroupByProduct below).
 const HqInventoryQuery = t.Partial(
   t.Object({
     search: t.String({ minLength: 1 }),
@@ -36,6 +33,7 @@ const HqInventoryQuery = t.Partial(
     offset: t.Numeric({ minimum: 0 }),
     sortOption: productSortOptionEnum,
     sortOrder: productSortOrderEnum,
+    groupBy: t.Boolean({ default: false }),
   }),
 );
 const BranchInventoryQuery = t.Partial(
@@ -68,8 +66,34 @@ const HqInventoryItem = t.Object({
   expiredDate: t.String({ format: "date-time" }),
 });
 
+// Grouped: the same lots rolled up under their product. `price` is the
+// product's global selling price; each lot in `stocks` keeps its own
+// `costPrice`, since cost can differ lot to lot even after grouping.
+const HqInventoryGroupByProduct = t.Object({
+  pId: t.Number(),
+  productName: t.String(),
+  productCategory: productCategoryNames,
+  categories,
+  description: t.String(),
+  barcode: t.String(),
+  price: t.Numeric(),
+  stocks: t.Array(
+    t.Object({
+      quantity: t.Integer(),
+      costPrice: t.Numeric(),
+      expiredDate: t.String({ format: "date-time" }),
+    }),
+  ),
+});
+
+// The route is a searchable, sortable, paged list — grouped it pages over
+// products, ungrouped over lots. `totalCount` counts whatever the current mode
+// pages over, so it's a product count when grouped and a lot count when not.
 const HqInventoryResponse = t.Object({
-  inventory: t.Array(HqInventoryItem),
+  inventory: t.Union([
+    t.Array(HqInventoryItem),
+    t.Array(HqInventoryGroupByProduct),
+  ]),
   totalCount: t.Integer(),
 });
 
@@ -139,4 +163,7 @@ export type BranchInventoryGroupByProduct = Static<
 export type BranchInventoryResult = Static<typeof BranchInventoryResponse>;
 export type HqInventoryQuery = Static<typeof HqInventoryQuery>;
 export type HqInventoryItem = Static<typeof HqInventoryItem>;
+export type HqInventoryGroupByProduct = Static<
+  typeof HqInventoryGroupByProduct
+>;
 export type HqInventoryResult = Static<typeof HqInventoryResponse>;

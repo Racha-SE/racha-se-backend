@@ -29,7 +29,11 @@ export const inventoryRoute = new Elysia({ prefix: "/inventory" })
       },
       detail: {
         summary: "View a headquarter's real-time stock (searchable)",
-        description: "Current stock on hand for a headquarter",
+        description:
+          "Current stock on hand for a headquarter. `groupBy=false` " +
+          "(default) lists lots; `groupBy=true` collapses them into one " +
+          "row per product, with each lot's quantity/cost/expiry under " +
+          "`stocks`.",
         tags: ["Inventory"],
       },
     },
