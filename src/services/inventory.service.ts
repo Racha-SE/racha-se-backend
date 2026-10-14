@@ -9,6 +9,7 @@ import {
   exists,
   gt,
   ilike,
+  inArray,
   or,
   sum,
   type SQL,
@@ -26,6 +27,7 @@ import {
 import type {
   BranchInventoryQuery,
   BranchInventoryResult,
+  HqInventoryGroupByProduct,
   HqInventoryQuery,
   HqInventoryResult,
 } from "@/models/inventory.model";
@@ -131,6 +133,7 @@ export const inventoryService = {
 
     const limit = query.limit ?? DEFAULT_LIMIT;
     const offset = query.offset ?? 0;
+    const isGrouped = query.groupBy ?? false;
 
     const conditions = [
       eq(product.isActive, true),
@@ -139,6 +142,9 @@ export const inventoryService = {
     ].filter((condition) => condition !== undefined);
 
     const direction = query.sortOrder === "desc" ? desc : asc;
+    // Either way the sort option is a fact about a lot, so both shapes sort on
+    // the same columns: ungrouped orders the rows themselves, grouped orders
+    // the lots inside each product.
     const lotSortColumns = {
       quantity: headOrderDetail.remain,
       costPrice: headOrderDetail.costPrice,
@@ -148,12 +154,87 @@ export const inventoryService = {
       ? lotSortColumns[query.sortOption]
       : undefined;
 
-    // One row per on-hand head_order_detail lot: a product with several lots
-    // shows up once per lot, and limit/offset page over lots, not products.
-    const lotWhere = and(onHandLots(), ...conditions);
+    if (!isGrouped) {
+      // One row per on-hand head_order_detail lot: a product with several lots
+      // shows up once per lot, and limit/offset page over lots, not products.
+      const lotWhere = and(onHandLots(), ...conditions);
 
-    // The count runs the same filters without limit/offset, so it's the size
-    // of the whole result set — the page's own length is `inventory.length`.
+      // The count runs the same filters without limit/offset, so it's the size
+      // of the whole result set — the page's own length is `inventory.length`.
+      const [rows, [{ totalCount }]] = await Promise.all([
+        db
+          .select({
+            pId: product.pId,
+            productName: product.name,
+            description: product.description,
+            barcode: product.barcode,
+            price: product.price,
+            quantity: headOrderDetail.remain,
+            costPrice: headOrderDetail.costPrice,
+            expiredDate: headOrderDetail.expiredDate,
+          })
+          .from(headOrderDetail)
+          .innerJoin(order, eq(order.lotId, headOrderDetail.lotId))
+          .innerJoin(product, eq(product.pId, headOrderDetail.pId))
+          .where(lotWhere)
+          // Sort option first, then a product's own lots FEFO, with hodId as
+          // the unique tiebreak that keeps paging over a non-unique key stable.
+          .orderBy(
+            ...(sortBy ? [direction(sortBy)] : []),
+            asc(headOrderDetail.pId),
+            asc(headOrderDetail.expiredDate),
+            asc(headOrderDetail.hodId),
+          )
+          .limit(limit)
+          .offset(offset),
+        db
+          .select({ totalCount: count() })
+          .from(headOrderDetail)
+          .innerJoin(order, eq(order.lotId, headOrderDetail.lotId))
+          .innerJoin(product, eq(product.pId, headOrderDetail.pId))
+          .where(lotWhere),
+      ]);
+
+      if (rows.length === 0) return { inventory: [], totalCount };
+
+      const categoriesByProduct = await categoriesFor(
+        rows.map((row) => row.pId),
+      );
+
+      return {
+        inventory: rows.map((row) => ({
+          pId: row.pId,
+          productName: row.productName,
+          description: row.description ?? "",
+          barcode: row.barcode,
+          ...categoryFields(categoriesByProduct.get(row.pId)),
+          quantity: row.quantity,
+          price: row.price,
+          costPrice: row.costPrice,
+          expiredDate: row.expiredDate.toISOString(),
+        })),
+        totalCount,
+      };
+    }
+
+    // Grouped mode pages over *products*, so the page is a product list: the
+    // lots only decide whether a product has stock at all (`exists`), never how
+    // many rows it takes up. Joining them in here would multiply the rows and
+    // turn `limit` into a count of lots.
+    const productWhere = and(
+      ...conditions,
+      exists(
+        db
+          .select({ pId: headOrderDetail.pId })
+          .from(headOrderDetail)
+          .innerJoin(order, eq(order.lotId, headOrderDetail.lotId))
+          .where(and(onHandLots(), eq(headOrderDetail.pId, product.pId))),
+      ),
+    );
+
+    // Counting `product` rows rather than lots, to match what this mode pages
+    // over — a product with five lots on hand is one row here, same as in the
+    // page itself.
     const [rows, [{ totalCount }]] = await Promise.all([
       db
         .select({
@@ -162,35 +243,52 @@ export const inventoryService = {
           description: product.description,
           barcode: product.barcode,
           price: product.price,
-          quantity: headOrderDetail.remain,
-          costPrice: headOrderDetail.costPrice,
-          expiredDate: headOrderDetail.expiredDate,
         })
-        .from(headOrderDetail)
-        .innerJoin(order, eq(order.lotId, headOrderDetail.lotId))
-        .innerJoin(product, eq(product.pId, headOrderDetail.pId))
-        .where(lotWhere)
-        // Sort option first, then a product's own lots FEFO, with hodId as
-        // the unique tiebreak that keeps paging over a non-unique key stable.
-        .orderBy(
-          ...(sortBy ? [direction(sortBy)] : []),
-          asc(headOrderDetail.pId),
-          asc(headOrderDetail.expiredDate),
-          asc(headOrderDetail.hodId),
-        )
+        .from(product)
+        .where(productWhere)
+        .orderBy(asc(product.pId))
         .limit(limit)
         .offset(offset),
-      db
-        .select({ totalCount: count() })
-        .from(headOrderDetail)
-        .innerJoin(order, eq(order.lotId, headOrderDetail.lotId))
-        .innerJoin(product, eq(product.pId, headOrderDetail.pId))
-        .where(lotWhere),
+      db.select({ totalCount: count() }).from(product).where(productWhere),
     ]);
 
     if (rows.length === 0) return { inventory: [], totalCount };
 
-    const categoriesByProduct = await categoriesFor(rows.map((row) => row.pId));
+    const pIds = rows.map((row) => row.pId);
+    const categoriesByProduct = await categoriesFor(pIds);
+
+    // The lots of this page of products. The sort option orders them *within*
+    // each product (pId leads the ordering, so the rows arrive grouped);
+    // without one they're FEFO, which is the order they'll go out in.
+    const lotRows = await db
+      .select({
+        pId: headOrderDetail.pId,
+        quantity: headOrderDetail.remain,
+        costPrice: headOrderDetail.costPrice,
+        expiredDate: headOrderDetail.expiredDate,
+      })
+      .from(headOrderDetail)
+      .innerJoin(order, eq(order.lotId, headOrderDetail.lotId))
+      .where(and(onHandLots(), inArray(headOrderDetail.pId, pIds)))
+      .orderBy(
+        asc(headOrderDetail.pId),
+        sortBy ? direction(sortBy) : asc(headOrderDetail.expiredDate),
+        asc(headOrderDetail.hodId),
+      );
+
+    const stocksByProduct = new Map<
+      number,
+      HqInventoryGroupByProduct["stocks"]
+    >();
+    for (const lot of lotRows) {
+      const stocks = stocksByProduct.get(lot.pId) ?? [];
+      stocks.push({
+        quantity: lot.quantity,
+        costPrice: lot.costPrice,
+        expiredDate: lot.expiredDate.toISOString(),
+      });
+      stocksByProduct.set(lot.pId, stocks);
+    }
 
     return {
       inventory: rows.map((row) => ({
@@ -199,10 +297,8 @@ export const inventoryService = {
         description: row.description ?? "",
         barcode: row.barcode,
         ...categoryFields(categoriesByProduct.get(row.pId)),
-        quantity: row.quantity,
         price: row.price,
-        costPrice: row.costPrice,
-        expiredDate: row.expiredDate.toISOString(),
+        stocks: stocksByProduct.get(row.pId) ?? [],
       })),
       totalCount,
     };
