@@ -21,12 +21,21 @@ export const reportsService = {
   ): Promise<ReportResult[]> {
     const startDate = startOfDay(new Date(startDateStr));
     const endDate = endOfDay(new Date(endDateStr));
-    const { branchId } = actor;
+    const { userType, branchId } = actor;
 
     if (endDate < startDate) {
       throw new AppError("BAD_REQUEST", {
         message: "End date cannot be before start date",
       });
+    }
+
+    if (
+      userType === "branch" &&
+      branchId &&
+      branchSelectedId &&
+      branchId !== branchSelectedId
+    ) {
+      throw new AppError("FORBIDDEN");
     }
 
     if (branchSelectedId !== undefined) {
@@ -38,20 +47,20 @@ export const reportsService = {
         throw new AppError("NOT_FOUND", { branchId: branchSelectedId });
     }
 
-    if (branchId && branchSelectedId && branchId !== branchSelectedId) {
-      throw new AppError("FORBIDDEN");
-    }
-
     const branchToSelectedCondition = and(
-      branchId ? eq(branchOrderDetail.branchId, branchId) : undefined,
-      branchSelectedId
+      branchId && userType === "branch"
+        ? eq(branchOrderDetail.branchId, branchId)
+        : undefined,
+      branchSelectedId && userType === "hq"
         ? eq(branchOrderDetail.branchId, branchSelectedId)
         : undefined,
     );
 
     const customerBranchToSelectedCondition = and(
-      branchId ? eq(customerOrderDetail.branchId, branchId) : undefined,
-      branchSelectedId
+      branchId && userType === "branch"
+        ? eq(customerOrderDetail.branchId, branchId)
+        : undefined,
+      branchSelectedId && userType === "hq"
         ? eq(customerOrderDetail.branchId, branchSelectedId)
         : undefined,
     );
