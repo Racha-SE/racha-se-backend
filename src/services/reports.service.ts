@@ -23,6 +23,12 @@ export const reportsService = {
     const endDate = endOfDay(new Date(endDateStr));
     const { branchId } = actor;
 
+    if (endDate < startDate) {
+      throw new AppError("BAD_REQUEST", {
+        message: "End date cannot be before start date",
+      });
+    }
+
     if (branchSelectedId !== undefined) {
       const [existing] = await db
         .select({ branchId: branch.branchId })

@@ -93,6 +93,7 @@ export const reportsRoute = new Elysia({ prefix: "/reports" })
       auth: READ_REPORT_TYPES,
       query: ReportQueryModel,
       response: {
+        400: tErrorResponse("BAD_REQUEST"),
         403: tErrorResponse("FORBIDDEN"),
         404: tErrorResponse("NOT_FOUND"),
         500: tErrorResponse("INTERNAL_SERVER_ERROR"),
