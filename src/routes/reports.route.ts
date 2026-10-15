@@ -19,11 +19,10 @@ function convertToCSV(salesData: ReportResult[]) {
         label: "Categories",
         value: (row: ReportResult) => row.categories.join(", "),
       },
-      { label: "Quantity", value: "quantity" },
       { label: "Sales Quantity", value: "salesQuantity" },
-      { label: "Total Revenue", value: "totalRevenue" },
-      { label: "Total Cost", value: "totalCost" },
-      { label: "Total Profit", value: "totalProfit" },
+      { label: "Revenue", value: "revenue" },
+      { label: "Cost", value: "cost" },
+      { label: "Profit", value: "profit" },
     ],
   }).parse(salesData);
 
@@ -38,11 +37,10 @@ async function convertToXLSX(salesData: ReportResult[]) {
     { header: "Product ID", key: "productId", width: 15 },
     { header: "Product Name", key: "productName", width: 30 },
     { header: "Categories", key: "categories", width: 30 },
-    { header: "Quantity", key: "quantity", width: 10 },
     { header: "Sales Quantity", key: "salesQuantity", width: 15 },
-    { header: "Total Revenue", key: "totalRevenue", width: 20 },
-    { header: "Total Cost", key: "totalCost", width: 20 },
-    { header: "Total Profit", key: "totalProfit", width: 20 },
+    { header: "Revenue", key: "revenue", width: 20 },
+    { header: "Cost", key: "cost", width: 20 },
+    { header: "Profit", key: "profit", width: 20 },
   ];
 
   salesData.forEach((data) => {
@@ -67,13 +65,22 @@ export const reportsRoute = new Elysia({ prefix: "/reports" })
         branchId,
       );
 
+      // Branch accounts are always scoped to their own branch, even with no
+      // ?branchId, so name the file after it rather than "all-branches".
+      const scopedBranchId =
+        actor.userType === "branch" ? actor.branchId : branchId;
+      const scope = scopedBranchId
+        ? `branch-${scopedBranchId}`
+        : "all-branches";
+      const filename = `sales_report_${scope}_${startDate}_to_${endDate}`;
+
       switch (format) {
         case "csv": {
           const csvData = convertToCSV(reportData);
           return new Response(csvData, {
             headers: {
               "Content-Type": "text/csv",
-              "Content-Disposition": `attachment; filename="sales_report_${startDate}_to_${endDate}.csv"`,
+              "Content-Disposition": `attachment; filename="${filename}.csv"`,
             },
           });
         }
@@ -83,7 +90,7 @@ export const reportsRoute = new Elysia({ prefix: "/reports" })
             headers: {
               "Content-Type":
                 "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-              "Content-Disposition": `attachment; filename="sales_report_${startDate}_to_${endDate}.xlsx"`,
+              "Content-Disposition": `attachment; filename="${filename}.xlsx"`,
             },
           });
         }
