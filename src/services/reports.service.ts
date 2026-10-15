@@ -43,6 +43,13 @@ export const reportsService = {
         : undefined,
     );
 
+    const customerBranchToSelectedCondition = and(
+      branchId ? eq(customerOrderDetail.branchId, branchId) : undefined,
+      branchSelectedId
+        ? eq(customerOrderDetail.branchId, branchSelectedId)
+        : undefined,
+    );
+
     const [purchased, sales] = await Promise.all([
       // What the branch bought: received branch orders HQ approved in range,
       // costed at the costPrice stamped on the line when it was ordered.
@@ -81,7 +88,7 @@ export const reportsService = {
         .innerJoin(product, eq(customerOrderDetail.pId, product.pId))
         .where(
           and(
-            branchToSelectedCondition,
+            customerBranchToSelectedCondition,
             eq(order.orderType, "customer"),
             eq(order.status, "completed"),
             gte(order.createdAt, startDate),
