@@ -4,7 +4,7 @@ export const ReportQueryModel = t.Object({
   startDate: t.String({ format: "date", description: "YYYY-MM-DD" }),
   endDate: t.String({ format: "date", description: "YYYY-MM-DD" }),
   format: t.Union([t.Literal("csv"), t.Literal("xlsx")]),
-  branchId: t.Optional(t.Integer({ minimum: 1 })),
+  branchId: t.Optional(t.Numeric({ minimum: 1 })),
 });
 
 export const ReportResult = t.Object({
