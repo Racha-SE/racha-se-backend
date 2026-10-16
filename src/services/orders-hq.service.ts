@@ -15,13 +15,20 @@ export const ordersHqService = {
     const productIds = items.map((item) => item.pId);
 
     return db.transaction(async (tx) => {
-      const [products, suppliers] = await Promise.all([
-        tx.query.product.findMany({
-          where: (product, { inArray, and, eq }) =>
-            and(inArray(product.pId, productIds), eq(product.isActive, true)),
-        }),
-        tx.select({ supplierId: supplier.supplierId }).from(supplier),
-      ]);
+      // Sequential, not Promise.all: both queries run on the same
+      // transaction-bound connection, and firing them concurrently on a
+      // single connection can leave it stuck "idle in transaction"
+      // indefinitely (reproduced repeatedly while driving this at scale —
+      // every other Promise.all in this codebase queries the pool-level
+      // `db`, where each query gets its own connection and concurrency is
+      // actually safe; this was the only one on `tx`).
+      const products = await tx.query.product.findMany({
+        where: (product, { inArray, and, eq }) =>
+          and(inArray(product.pId, productIds), eq(product.isActive, true)),
+      });
+      const suppliers = await tx
+        .select({ supplierId: supplier.supplierId })
+        .from(supplier);
 
       const mappedProducts = new Map(
         products.map((product) => [product.pId, product]),
