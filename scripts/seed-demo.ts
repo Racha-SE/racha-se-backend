@@ -487,11 +487,14 @@ const hqUser = await ensureDemoHqUser();
 await seed(hqUser.id);
 const scan = await notificationService.scanAlerts();
 
-const [minStockAlerts, expireAlerts, inventory] = await Promise.all([
-  notificationService.listHqMinStock(),
-  notificationService.listHqExpire(),
-  inventoryService.getHqStock(hqUser, { limit: 100 }),
-]);
+const [{ result: minStockAlerts }, { result: expireAlerts }, inventory] =
+  await Promise.all([
+    // Default limit (20) comfortably covers this script's fixed, small
+    // catalog — no need to page through results here.
+    notificationService.listHqMinStock(),
+    notificationService.listHqExpire(),
+    inventoryService.getHqStock(hqUser, { limit: 100 }),
+  ]);
 
 const checks = {
   "HQ min_stock alerts": diff(

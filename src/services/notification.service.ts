@@ -40,7 +40,18 @@
 // arriving (ordersHqService.create), a branch's own receive step, customer
 // orders consuming branch stock — depends on order flows that are
 // themselves still stubs; out of scope here.
-import { and, asc, desc, eq, gt, inArray, isNull, lte, sum } from "drizzle-orm";
+import {
+  and,
+  asc,
+  count,
+  desc,
+  eq,
+  gt,
+  inArray,
+  isNull,
+  lte,
+  sum,
+} from "drizzle-orm";
 import { db } from "@/db/client";
 import {
   branchOrderDetail,
@@ -50,7 +61,10 @@ import {
   order,
   product,
 } from "@/db/schema";
-import type { NotificationAlertEntry } from "@/models/notification.model";
+import type {
+  AlertListQuery,
+  AlertListResult,
+} from "@/models/notification.model";
 import { assertBranchScope, type ScopedActor } from "@/utils/hierarchy";
 
 type NotificationType = (typeof notificationTypeEnum.enumValues)[number];
@@ -74,38 +88,56 @@ function scopeKey(branchId: number | null, pId: number): string {
 async function listAlerts(
   type: NotificationType,
   branchId: number | null,
-): Promise<NotificationAlertEntry[]> {
-  return await db
-    .select({
-      notificationId: notification.notificationId,
-      type: notification.type,
-      branchId: notification.branchId,
-      pId: notification.pId,
-      quantity: notification.quantity,
-      lotId: notification.lotId,
-      expiredDate: notification.expiredDate,
-      isResolved: notification.isResolved,
-      resolvedAt: notification.resolvedAt,
-      createdAt: notification.createdAt,
-      productName: product.name,
-      barcode: product.barcode,
-    })
-    .from(notification)
-    .innerJoin(product, eq(notification.pId, product.pId))
-    .where(
-      and(
-        eq(notification.type, type),
-        branchId === null
-          ? isNull(notification.branchId)
-          : eq(notification.branchId, branchId),
-        eq(notification.isResolved, false),
-      ),
-    )
-    .orderBy(
-      type === "expire"
-        ? asc(notification.expiredDate)
-        : desc(notification.createdAt),
-    );
+  query: AlertListQuery,
+): Promise<AlertListResult> {
+  const limit = query.limit ?? 20;
+  const offset = query.offset ?? 0;
+
+  const where = and(
+    eq(notification.type, type),
+    branchId === null
+      ? isNull(notification.branchId)
+      : eq(notification.branchId, branchId),
+    eq(notification.isResolved, false),
+  );
+
+  const [result, [{ total }]] = await Promise.all([
+    db
+      .select({
+        notificationId: notification.notificationId,
+        type: notification.type,
+        branchId: notification.branchId,
+        pId: notification.pId,
+        quantity: notification.quantity,
+        lotId: notification.lotId,
+        expiredDate: notification.expiredDate,
+        isResolved: notification.isResolved,
+        resolvedAt: notification.resolvedAt,
+        createdAt: notification.createdAt,
+        productName: product.name,
+        barcode: product.barcode,
+      })
+      .from(notification)
+      .innerJoin(product, eq(notification.pId, product.pId))
+      .where(where)
+      .orderBy(
+        type === "expire"
+          ? asc(notification.expiredDate)
+          : desc(notification.createdAt),
+      )
+      .limit(limit)
+      .offset(offset),
+    db.select({ total: count() }).from(notification).where(where),
+  ]);
+
+  return {
+    result,
+    total,
+    limit,
+    offset,
+    page: Math.floor(offset / limit) + 1,
+    totalPages: Math.ceil(total / limit),
+  };
 }
 
 /**
@@ -408,28 +440,30 @@ async function checkExpiringLots(
 }
 
 export const notificationService = {
-  listHqExpire(): Promise<NotificationAlertEntry[]> {
-    return listAlerts("expire", null);
+  listHqExpire(query: AlertListQuery = {}): Promise<AlertListResult> {
+    return listAlerts("expire", null, query);
   },
 
-  listHqMinStock(): Promise<NotificationAlertEntry[]> {
-    return listAlerts("min_stock", null);
+  listHqMinStock(query: AlertListQuery = {}): Promise<AlertListResult> {
+    return listAlerts("min_stock", null, query);
   },
 
   listBranchExpire(
     actor: ScopedActor,
     branchId: number,
-  ): Promise<NotificationAlertEntry[]> {
+    query: AlertListQuery = {},
+  ): Promise<AlertListResult> {
     assertBranchScope(actor, branchId);
-    return listAlerts("expire", branchId);
+    return listAlerts("expire", branchId, query);
   },
 
   listBranchMinStock(
     actor: ScopedActor,
     branchId: number,
-  ): Promise<NotificationAlertEntry[]> {
+    query: AlertListQuery = {},
+  ): Promise<AlertListResult> {
     assertBranchScope(actor, branchId);
-    return listAlerts("min_stock", branchId);
+    return listAlerts("min_stock", branchId, query);
   },
 
   checkMinStock,

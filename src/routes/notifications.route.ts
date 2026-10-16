@@ -21,10 +21,11 @@ export const notificationsRoute = new Elysia({ prefix: "/notifications" })
   .use(authPlugin)
   .get(
     "/hq/expire",
-    async () =>
-      successResponse({ result: await notificationService.listHqExpire() }),
+    async ({ query }) =>
+      successResponse(await notificationService.listHqExpire(query)),
     {
       auth: ["hq"],
+      query: NotificationModel.alertListQuery,
       response: {
         200: tSuccessResponse(NotificationModel.alertListResult),
         500: tErrorResponse("INTERNAL_SERVER_ERROR"),
@@ -32,17 +33,18 @@ export const notificationsRoute = new Elysia({ prefix: "/notifications" })
       detail: {
         summary: "List open HQ expire notifications",
         description:
-          "Unresolved expire notifications scoped to HQ (branchId null), joined with product name/barcode. Opened by POST /notifications/scan.",
+          "Unresolved expire notifications scoped to HQ (branchId null), joined with product name/barcode, paginated (limit default 20). Opened by POST /notifications/scan.",
         tags: ["Notifications"],
       },
     },
   )
   .get(
     "/hq/min-stock",
-    async () =>
-      successResponse({ result: await notificationService.listHqMinStock() }),
+    async ({ query }) =>
+      successResponse(await notificationService.listHqMinStock(query)),
     {
       auth: ["hq"],
+      query: NotificationModel.alertListQuery,
       response: {
         200: tSuccessResponse(NotificationModel.alertListResult),
         500: tErrorResponse("INTERNAL_SERVER_ERROR"),
@@ -50,49 +52,53 @@ export const notificationsRoute = new Elysia({ prefix: "/notifications" })
       detail: {
         summary: "List open HQ min_stock notifications",
         description:
-          "Unresolved min_stock notifications scoped to HQ (branchId null), joined with product name/barcode. Opened/resolved by ordersBranchService.create() and by POST /notifications/scan.",
+          "Unresolved min_stock notifications scoped to HQ (branchId null), joined with product name/barcode, paginated (limit default 20). Opened/resolved by ordersBranchService.create() and by POST /notifications/scan.",
         tags: ["Notifications"],
       },
     },
   )
   .get(
     "/branches/:branchId/expire",
-    async ({ user, params }) =>
-      successResponse({
-        result: await notificationService.listBranchExpire(
+    async ({ user, params, query }) =>
+      successResponse(
+        await notificationService.listBranchExpire(
           toActor(user),
           params.branchId,
+          query,
         ),
-      }),
+      ),
     {
       auth: ["hq", "branch"],
       params: NotificationModel.branchParams,
+      query: NotificationModel.alertListQuery,
       response: alertResponse,
       detail: {
         summary: "List open expire notifications for a branch",
         description:
-          "Unresolved expire notifications for one branch, joined with product name/barcode. hq can view any branch; a branch user only their own (403 otherwise). Opened by POST /notifications/scan.",
+          "Unresolved expire notifications for one branch, joined with product name/barcode, paginated (limit default 20). hq can view any branch; a branch user only their own (403 otherwise). Opened by POST /notifications/scan.",
         tags: ["Notifications"],
       },
     },
   )
   .get(
     "/branches/:branchId/min-stock",
-    async ({ user, params }) =>
-      successResponse({
-        result: await notificationService.listBranchMinStock(
+    async ({ user, params, query }) =>
+      successResponse(
+        await notificationService.listBranchMinStock(
           toActor(user),
           params.branchId,
+          query,
         ),
-      }),
+      ),
     {
       auth: ["hq", "branch"],
       params: NotificationModel.branchParams,
+      query: NotificationModel.alertListQuery,
       response: alertResponse,
       detail: {
         summary: "List open min_stock notifications for a branch",
         description:
-          "Unresolved min_stock notifications for one branch, joined with product name/barcode. hq can view any branch; a branch user only their own (403 otherwise). Opened/resolved by ordersBranchService.create() and by POST /notifications/scan.",
+          "Unresolved min_stock notifications for one branch, joined with product name/barcode, paginated (limit default 20). hq can view any branch; a branch user only their own (403 otherwise). Opened/resolved by ordersBranchService.create() and by POST /notifications/scan.",
         tags: ["Notifications"],
       },
     },
