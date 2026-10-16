@@ -17,8 +17,17 @@ const alertEntry = t.Composite([
 export const NotificationModel = {
   entity,
   alertEntry,
+  alertListQuery: t.Object({
+    limit: t.Optional(t.Numeric()),
+    offset: t.Optional(t.Numeric()),
+  }),
   alertListResult: t.Object({
     result: t.Array(alertEntry),
+    total: t.Number(),
+    page: t.Number(),
+    totalPages: t.Number(),
+    limit: t.Number(),
+    offset: t.Number(),
   }),
   branchParams: t.Object({ branchId: t.Numeric({ minimum: 1 }) }),
   scanResult: t.Object({
@@ -32,6 +41,8 @@ export const NotificationModel = {
 export type NotificationAlertEntry = Static<
   typeof NotificationModel.alertEntry
 >;
+export type AlertListQuery = Static<typeof NotificationModel.alertListQuery>;
+export type AlertListResult = Static<typeof NotificationModel.alertListResult>;
 export type NotificationScanResult = Static<
   typeof NotificationModel.scanResult
 >;
