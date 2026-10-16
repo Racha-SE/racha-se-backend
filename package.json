@@ -16,6 +16,7 @@
     "db:studio": "drizzle-kit studio",
     "db:seed:mock-users": "docker compose exec -T db psql -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-racha_se} < seeds/mock_users.sql",
     "db:seed:demo": "bun run scripts/seed-demo.ts",
+    "db:seed:demo:scale": "bun run scripts/seed-demo-scale.ts",
     "create-admin": "bun run scripts/create-admin.ts"
   },
   "dependencies": {
