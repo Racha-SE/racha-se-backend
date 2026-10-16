@@ -25,12 +25,14 @@ export function toActor(user: {
 
 /**
  * Which userTypes an actor's userType is allowed to create/deactivate.
- * hq acts system-wide; branch is confined to cashiers in its own branch;
- * cashier/customer manage no one.
+ * hq acts system-wide; branch can create more branch managers and cashiers,
+ * confined to its own branch (assertBranchScope below enforces the branch
+ * part — this only decides which userTypes are in reach at all); cashier/
+ * customer manage no one.
  */
 const MANAGEABLE_USER_TYPES: Record<UserType, UserType[]> = {
   hq: ["hq", "branch", "cashier", "customer"],
-  branch: ["cashier"],
+  branch: ["branch", "cashier"],
   cashier: [],
   customer: [],
 };
