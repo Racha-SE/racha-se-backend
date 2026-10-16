@@ -24,6 +24,8 @@ const userTypeSchema = t.Union(
   userTypeEnum.enumValues.map((value) => t.Literal(value)),
 );
 
+const sortDirection = t.Union([t.Literal("asc"), t.Literal("desc")]);
+
 export const UsersModel = {
   entity,
   params: t.Object({ id: t.String() }),
@@ -31,6 +33,20 @@ export const UsersModel = {
     branchId: t.Optional(t.Numeric()),
     userType: t.Optional(userTypeSchema),
     search: t.Optional(t.String()),
+    status: t.Optional(t.Union([t.Literal("active"), t.Literal("inactive")])),
+    // Separate from `userType` on purpose — "root" in the frontend's filter
+    // means better-auth's `role` column (admin/user), not the business
+    // `userType`, so it needs its own query param rather than overloading
+    // userType with a value that isn't actually one of its enum members.
+    isRoot: t.Optional(t.Boolean()),
+    // One optional param per sortable column, applied id > username > email
+    // > branch when more than one is set — matches the frontend's existing
+    // multi-column sort priority exactly, so paginating server-side doesn't
+    // change what order columns win when several are toggled at once.
+    sortId: t.Optional(sortDirection),
+    sortUsername: t.Optional(sortDirection),
+    sortEmail: t.Optional(sortDirection),
+    sortBranch: t.Optional(sortDirection),
     limit: t.Optional(t.Numeric()),
     offset: t.Optional(t.Numeric()),
   }),

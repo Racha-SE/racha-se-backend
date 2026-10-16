@@ -1,4 +1,13 @@
-import { and, count, eq, ilike, or } from "drizzle-orm";
+import {
+  and,
+  asc,
+  count,
+  desc,
+  eq,
+  getTableColumns,
+  ilike,
+  or,
+} from "drizzle-orm";
 import { APIError } from "better-auth";
 import { db } from "@/db/client";
 import { branch, session, user } from "@/db/schema";
@@ -65,6 +74,8 @@ export const usersService = {
         ? eq(user.branchId, branchId)
         : undefined,
       query.userType ? eq(user.userType, query.userType) : undefined,
+      query.isRoot ? eq(user.role, "admin") : undefined,
+      query.status ? eq(user.banned, query.status === "inactive") : undefined,
       query.search
         ? or(
             ilike(user.username, `%${query.search}%`),
@@ -76,8 +87,34 @@ export const usersService = {
     ].filter((condition) => condition !== undefined);
     const where = conditions.length ? and(...conditions) : undefined;
 
+    // Only the columns a caller actually toggled, in the frontend's fixed
+    // priority order (id, username, email, branch name) — falls back to id
+    // ascending so paginated pages stay stable when nothing is toggled.
+    const orderBy = [
+      query.sortId && (query.sortId === "asc" ? asc(user.id) : desc(user.id)),
+      query.sortUsername &&
+        (query.sortUsername === "asc"
+          ? asc(user.username)
+          : desc(user.username)),
+      query.sortEmail &&
+        (query.sortEmail === "asc" ? asc(user.email) : desc(user.email)),
+      query.sortBranch &&
+        (query.sortBranch === "asc" ? asc(branch.name) : desc(branch.name)),
+    ].filter((clause): clause is NonNullable<typeof clause> => Boolean(clause));
+    if (orderBy.length === 0) orderBy.push(asc(user.id));
+
     const [users, [{ total }]] = await Promise.all([
-      db.select().from(user).where(where).limit(limit).offset(offset),
+      db
+        .select(getTableColumns(user))
+        .from(user)
+        // Branch name is only needed for the sortBranch column above — a
+        // left join (not inner) so hq/customer rows with no branch still
+        // come back, same as every other filter here.
+        .leftJoin(branch, eq(branch.branchId, user.branchId))
+        .where(where)
+        .orderBy(...orderBy)
+        .limit(limit)
+        .offset(offset),
       db.select({ total: count() }).from(user).where(where),
     ]);
 
