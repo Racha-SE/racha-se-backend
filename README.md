@@ -45,20 +45,21 @@ The API is now at `http://localhost:3000/api/v1`.
 
 ## Scripts
 
-| Command                      | What it does                                                                                     |
-| ---------------------------- | ------------------------------------------------------------------------------------------------ |
-| `bun run dev`                | Start the dev server with `--watch` (`NODE_ENV=development`)                                     |
-| `bun run typecheck`          | `tsc --noEmit`                                                                                   |
-| `bun run lint`               | `eslint .`                                                                                       |
-| `bun run lint:fix`           | `eslint --fix .`                                                                                 |
-| `bun run format`             | `prettier --check .`                                                                             |
-| `bun run format:fix`         | `prettier --write .`                                                                             |
-| `bun run db:generate`        | Generate a migration from `src/db/schema/`                                                       |
-| `bun run db:migrate`         | Apply pending migrations to `DATABASE_URL`                                                       |
-| `bun run db:studio`          | Open [Drizzle Studio](https://orm.drizzle.team/drizzle-studio/overview) (DB browser UI)          |
-| `bun run db:seed:mock-users` | Reset `mock_users` to a fixed set of 9 names (`seeds/mock_users.sql`)                            |
-| `bun run db:seed:demo`       | **Wipes** products/suppliers/orders/notifications and loads HQ demo data (see "Demo data" below) |
-| `bun run create-admin`       | One-off: create the first admin account (see "Authentication" below)                             |
+| Command                      | What it does                                                                                                    |
+| ---------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| `bun run dev`                | Start the dev server with `--watch` (`NODE_ENV=development`)                                                    |
+| `bun run typecheck`          | `tsc --noEmit`                                                                                                  |
+| `bun run lint`               | `eslint .`                                                                                                      |
+| `bun run lint:fix`           | `eslint --fix .`                                                                                                |
+| `bun run format`             | `prettier --check .`                                                                                            |
+| `bun run format:fix`         | `prettier --write .`                                                                                            |
+| `bun run db:generate`        | Generate a migration from `src/db/schema/`                                                                      |
+| `bun run db:migrate`         | Apply pending migrations to `DATABASE_URL`                                                                      |
+| `bun run db:studio`          | Open [Drizzle Studio](https://orm.drizzle.team/drizzle-studio/overview) (DB browser UI)                         |
+| `bun run db:seed:mock-users` | Reset `mock_users` to a fixed set of 9 names (`seeds/mock_users.sql`)                                           |
+| `bun run db:seed:demo`       | **Wipes** products/suppliers/orders/notifications and loads HQ demo data (see "Demo data" below)                |
+| `bun run db:seed:demo:scale` | **Wipes** products/suppliers/orders/notifications and loads a large-scale network (see "Scale demo data" below) |
+| `bun run create-admin`       | One-off: create the first admin account (see "Authentication" below)                                            |
 
 ## Routes
 
@@ -167,6 +168,34 @@ What it produces (the script checks this itself after seeding and exits non-zero
 Two results that look odd but are how the real logic works: Whole Wheat Bread expired 2 days ago, so it raises a **min_stock** alert (expired lots don't count as usable stock) but **no** expire alert (that alert only covers lots expiring within the next 7 days). Orange Juice expires in 10 days — just outside that window — so it has no alert yet. Prices are whole baht.
 
 Alerts come from the real `notificationService.scanAlerts()` (the same thing `POST /api/v1/notifications/scan` runs), not hand-inserted rows — so after changing stock by hand, call that endpoint to refresh them.
+
+## Scale demo data
+
+`bun run db:seed:demo:scale` (`scripts/seed-demo-scale.ts`) builds a whole retail network instead of one curated catalog — for load-testing the UI/pagination and demoing the full order lifecycle across many branches, not for asserting exact alert output (unlike `db:seed:demo`, it doesn't self-check against a fixed expected list; numbers are randomised on every run). It's local development only (it also refuses to run with `NODE_ENV=production`).
+
+```bash
+docker compose up -d db
+bun run db:migrate
+bun run db:seed:demo:scale
+bun run dev
+```
+
+It produces:
+
+- 50 suppliers, 200 products (8 categories). Each product gets its own random number of HQ restock lots (1-5, not locked to a fixed count) — about half end up with 2+ simultaneous lots, so inventory actually shows overlapping batches with distinct expiry dates for the same product, not just one
+- 20 branches, each with **2 branch-manager accounts + 3 cashier accounts**, plus **5 HQ accounts** (all granted `role: admin`, which the frontend's root-only pages like user management gate on) — 105 accounts total
+- Every branch places 12 separate orders ("lots") to HQ, each for a distinct slice of the catalog, plus a handful of extra "overlap" orders layering more lots onto products it already holds — **≥120 distinct products and ≥12 lots per branch**, comfortably over the 100-product / 10-lot minimum
+- ~10% of products are deliberately kept under `minStockHq` at HQ (and ~10% of each branch's own products under `minStockBranch`), permanently — real, guaranteed min_stock alerts, not just whatever happens to fall under the threshold by chance
+- ~5% of products get a lot landing inside the 7-day expire warning window at HQ and at each branch, and a separate ~5% get a small lot that already expired before the script ran (old stock still on the shelf, counted as min_stock rather than expire) — real expire alerts at both scopes
+- ~15 simulated cash sales per branch at the register, run through the real cashier checkout flow
+
+Every order (HQ restock, branch request → approve → receive, customer checkout) is driven through the real `orders-hq`/`orders-branch`/`orders-customer` services end to end, not hand-inserted rows — so FEFO draws, stock levels and notifications match exactly what the real app would produce. `notificationService.scanAlerts()` runs at the end, and the script re-reads every alert list (`listHqExpire`/`listHqMinStock`/`listBranchExpire`/`listBranchMinStock`) to confirm the alerts it deliberately set up are actually open, the same real-read-path self-check `db:seed:demo` uses.
+
+Sign in as `hq01.scale@racha-se.local`, `branch01.manager1.scale@racha-se.local` or `branch01.cashier1.scale@racha-se.local` (pattern: `branch{01-20}.manager{1-2}.scale@racha-se.local` / `branch{01-20}.cashier{1-3}.scale@racha-se.local`) — all share the password `DemoScale123!`.
+
+**Branches and the 105 accounts are idempotent** (looked up by name/email, created once, reused on re-run — role is reconciled to `admin` on an existing row too, so re-running after a version that didn't grant it still fixes older accounts) — only the catalog (`supplier`, `product`, `order` and its three detail tables, `notification`) is wiped and regenerated fresh every run, same table list as `db:seed:demo`. Re-running after `db:seed:demo` (or vice versa) wipes the other script's catalog data; that's expected, they share the same tables.
+
+The script exits non-zero if any branch actually lands under the minimum (100 distinct products, 10 lots, 1 expire alert, 1 min_stock alert) or HQ ends up with no open expire/min_stock alert, instead of silently producing a smaller demo.
 
 ## Pre-commit
 
