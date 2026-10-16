@@ -45,21 +45,22 @@ The API is now at `http://localhost:3000/api/v1`.
 
 ## Scripts
 
-| Command                      | What it does                                                                                                    |
-| ---------------------------- | --------------------------------------------------------------------------------------------------------------- |
-| `bun run dev`                | Start the dev server with `--watch` (`NODE_ENV=development`)                                                    |
-| `bun run typecheck`          | `tsc --noEmit`                                                                                                  |
-| `bun run lint`               | `eslint .`                                                                                                      |
-| `bun run lint:fix`           | `eslint --fix .`                                                                                                |
-| `bun run format`             | `prettier --check .`                                                                                            |
-| `bun run format:fix`         | `prettier --write .`                                                                                            |
-| `bun run db:generate`        | Generate a migration from `src/db/schema/`                                                                      |
-| `bun run db:migrate`         | Apply pending migrations to `DATABASE_URL`                                                                      |
-| `bun run db:studio`          | Open [Drizzle Studio](https://orm.drizzle.team/drizzle-studio/overview) (DB browser UI)                         |
-| `bun run db:seed:mock-users` | Reset `mock_users` to a fixed set of 9 names (`seeds/mock_users.sql`)                                           |
-| `bun run db:seed:demo`       | **Wipes** products/suppliers/orders/notifications and loads HQ demo data (see "Demo data" below)                |
-| `bun run db:seed:demo:scale` | **Wipes** products/suppliers/orders/notifications and loads a large-scale network (see "Scale demo data" below) |
-| `bun run create-admin`       | One-off: create the first admin account (see "Authentication" below)                                            |
+| Command                      | What it does                                                                                                          |
+| ---------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| `bun run dev`                | Start the dev server with `--watch` (`NODE_ENV=development`)                                                          |
+| `bun run typecheck`          | `tsc --noEmit`                                                                                                        |
+| `bun run lint`               | `eslint .`                                                                                                            |
+| `bun run lint:fix`           | `eslint --fix .`                                                                                                      |
+| `bun run format`             | `prettier --check .`                                                                                                  |
+| `bun run format:fix`         | `prettier --write .`                                                                                                  |
+| `bun run db:generate`        | Generate a migration from `src/db/schema/`                                                                            |
+| `bun run db:migrate`         | Apply pending migrations to `DATABASE_URL`                                                                            |
+| `bun run db:studio`          | Open [Drizzle Studio](https://orm.drizzle.team/drizzle-studio/overview) (DB browser UI)                               |
+| `bun run db:seed:mock-users` | Reset `mock_users` to a fixed set of 9 names (`seeds/mock_users.sql`)                                                 |
+| `bun run db:seed:demo`       | **Wipes** products/suppliers/orders/notifications and loads HQ demo data (see "Demo data" below)                      |
+| `bun run db:seed:demo:scale` | **Wipes** products/suppliers/orders/notifications and loads a large-scale network (see "Scale demo data" below)       |
+| `bun run db:reset`           | **Wipes every table** — branches, users, sessions included, not just the catalog (see "Resetting the database" below) |
+| `bun run create-admin`       | One-off: create the first admin account (see "Authentication" below)                                                  |
 
 ## Routes
 
@@ -196,6 +197,18 @@ Sign in as `hq01.scale@racha-se.local`, `branch01.manager1.scale@racha-se.local`
 **Branches and the 105 accounts are idempotent** (looked up by name/email, created once, reused on re-run — role is reconciled to `admin` on an existing row too, so re-running after a version that didn't grant it still fixes older accounts) — only the catalog (`supplier`, `product`, `order` and its three detail tables, `notification`) is wiped and regenerated fresh every run, same table list as `db:seed:demo`. Re-running after `db:seed:demo` (or vice versa) wipes the other script's catalog data; that's expected, they share the same tables.
 
 The script exits non-zero if any branch actually lands under the minimum (100 distinct products, 10 lots, 1 expire alert, 1 min_stock alert) or HQ ends up with no open expire/min_stock alert, instead of silently producing a smaller demo.
+
+## Resetting the database
+
+`bun run db:reset` (`scripts/reset-db.ts`) is a full "start over" — it truncates **every table**, including `branch`, `user` and better-auth's own `session`/`account`/`verification`, not just the catalog/order tables the seed scripts touch. Both seed scripts are deliberately idempotent on branches/users (kept across runs); this script is the opposite. Reach for it when the DB has drifted into a state reseeding on top of won't fix — stale test accounts, broken sessions, whatever. It's local development only (same `NODE_ENV=production` guard as the seed scripts).
+
+It refuses to do anything silently: it prints every table it's about to empty, then asks you to type the database name (parsed out of `DATABASE_URL`) back at a prompt — anything else cancels with nothing deleted. There's no flag to skip the prompt.
+
+```bash
+bun run db:reset
+# Type the database name (e.g. racha_se) when asked, then reseed:
+bun run db:seed:demo:scale
+```
 
 ## Pre-commit
 
