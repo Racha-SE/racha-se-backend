@@ -17,10 +17,12 @@ const alertEntry = t.Composite([
 export const NotificationModel = {
   entity,
   alertEntry,
-  alertListQuery: t.Object({
-    limit: t.Optional(t.Numeric()),
-    offset: t.Optional(t.Numeric()),
-  }),
+  alertListQuery: t.Partial(
+    t.Object({
+      limit: t.Numeric(),
+      offset: t.Numeric(),
+    }),
+  ),
   alertListResult: t.Object({
     result: t.Array(alertEntry),
     total: t.Number(),

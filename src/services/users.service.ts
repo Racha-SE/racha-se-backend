@@ -57,6 +57,9 @@ async function assertBranchExists(branchId: number): Promise<void> {
     throw new AppError("BAD_REQUEST", { reason: "branch not found", branchId });
 }
 
+const sortOrder = (direction: "asc" | "desc") =>
+  direction === "asc" ? asc : desc;
+
 export const usersService = {
   async list(
     actor: ScopedActor,
@@ -91,15 +94,10 @@ export const usersService = {
     // priority order (id, username, email, branch name) — falls back to id
     // ascending so paginated pages stay stable when nothing is toggled.
     const orderBy = [
-      query.sortId && (query.sortId === "asc" ? asc(user.id) : desc(user.id)),
-      query.sortUsername &&
-        (query.sortUsername === "asc"
-          ? asc(user.username)
-          : desc(user.username)),
-      query.sortEmail &&
-        (query.sortEmail === "asc" ? asc(user.email) : desc(user.email)),
-      query.sortBranch &&
-        (query.sortBranch === "asc" ? asc(branch.name) : desc(branch.name)),
+      query.sortId && sortOrder(query.sortId)(user.id),
+      query.sortUsername && sortOrder(query.sortUsername)(user.username),
+      query.sortEmail && sortOrder(query.sortEmail)(user.email),
+      query.sortBranch && sortOrder(query.sortBranch)(branch.name),
     ].filter((clause): clause is NonNullable<typeof clause> => Boolean(clause));
     if (orderBy.length === 0) orderBy.push(asc(user.id));
 
