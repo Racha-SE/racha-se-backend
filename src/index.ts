@@ -17,6 +17,7 @@ import {
   productsRoute,
   suppliersRoute,
   usersRoute,
+  reportsRoute,
 } from "@/routes";
 import { getAuthOpenAPIDocumentation, verifyMailerConnection } from "@/utils";
 
@@ -75,6 +76,7 @@ export const app = new Elysia()
               "Persisted expire and min_stock alerts (HQ and branch scoped)",
           },
           { name: "Branches", description: "Branch master data management" },
+          { name: "Reports", description: "Sales and profit reports" },
           {
             name: "Mock",
             description:
@@ -100,7 +102,8 @@ export const app = new Elysia()
       .use(ordersCustomerRoute)
       .use(inventoryRoute)
       .use(notificationsRoute)
-      .use(branchesRoute);
+      .use(branchesRoute)
+      .use(reportsRoute);
 
     // mock routes exist only to demonstrate the architecture — never expose them outside dev
     if (process.env.NODE_ENV === "development") {

@@ -12,3 +12,4 @@ export * from "./orders-hq.route";
 export * from "./products.route";
 export * from "./suppliers.route";
 export * from "./users.route";
+export * from "./reports.route";

@@ -1,0 +1,129 @@
+import ExcelJS from "exceljs";
+import { Parser } from "json2csv";
+import { Elysia } from "elysia";
+import { authPlugin } from "@/plugins/auth.plugin";
+import { reportsService } from "@/services/reports.service";
+import { ReportQueryModel } from "@/models/reports.model";
+import { type ReportResult } from "@/models/reports.model";
+import { type UserType, tErrorResponse, toActor } from "@/utils";
+
+// HQ and Branch accounts can view reports.
+const READ_REPORT_TYPES: UserType[] = ["hq", "branch"];
+
+function convertToCSV(salesData: ReportResult[]) {
+  const csv = new Parser({
+    fields: [
+      { label: "Product ID", value: "productId" },
+      { label: "Product Name", value: "productName" },
+      {
+        label: "Categories",
+        value: (row: ReportResult) => row.categories.join(", "),
+      },
+      { label: "Sales Quantity", value: "salesQuantity" },
+      { label: "Revenue", value: "revenue" },
+      { label: "Cost", value: "cost" },
+      { label: "Profit", value: "profit" },
+    ],
+  }).parse(salesData);
+
+  return csv;
+}
+
+async function convertToXLSX(salesData: ReportResult[]) {
+  const wb = new ExcelJS.Workbook();
+  const ws = wb.addWorksheet("Sales Report");
+
+  ws.columns = [
+    { header: "Product ID", key: "productId", width: 15 },
+    { header: "Product Name", key: "productName", width: 30 },
+    { header: "Categories", key: "categories", width: 30 },
+    { header: "Sales Quantity", key: "salesQuantity", width: 15 },
+    { header: "Revenue", key: "revenue", width: 20 },
+    { header: "Cost", key: "cost", width: 20 },
+    { header: "Profit", key: "profit", width: 20 },
+  ];
+
+  salesData.forEach((data) => {
+    ws.addRow({ ...data, categories: data.categories.join(", ") });
+  });
+
+  const buf = await wb.xlsx.writeBuffer();
+  return buf;
+}
+
+export const reportsRoute = new Elysia({ prefix: "/reports" })
+  .use(authPlugin)
+  .get(
+    "/",
+    async ({ user, query }) => {
+      const actor = toActor(user);
+      const { startDate, endDate, format, branchId } = query;
+      const reportData = await reportsService.getSalesAndProfitReport(
+        actor,
+        startDate,
+        endDate,
+        branchId,
+      );
+
+      // Branch accounts are always scoped to their own branch, even with no
+      // ?branchId, so name the file after it rather than "all-branches".
+      const scopedBranchId =
+        actor.userType === "branch" ? actor.branchId : branchId;
+      const scope = scopedBranchId
+        ? `branch-${scopedBranchId}`
+        : "all-branches";
+      const filename = `sales_report_${scope}_${startDate}_to_${endDate}`;
+
+      switch (format) {
+        case "csv": {
+          const csvData = convertToCSV(reportData);
+          return new Response(csvData, {
+            headers: {
+              "Content-Type": "text/csv",
+              "Content-Disposition": `attachment; filename="${filename}.csv"`,
+            },
+          });
+        }
+        case "xlsx": {
+          const xlsxData = await convertToXLSX(reportData);
+          return new Response(xlsxData, {
+            headers: {
+              "Content-Type":
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+              "Content-Disposition": `attachment; filename="${filename}.xlsx"`,
+            },
+          });
+        }
+      }
+    },
+    {
+      auth: READ_REPORT_TYPES,
+      query: ReportQueryModel,
+      response: {
+        400: tErrorResponse("BAD_REQUEST"),
+        403: tErrorResponse("FORBIDDEN"),
+        404: tErrorResponse("NOT_FOUND"),
+        500: tErrorResponse("INTERNAL_SERVER_ERROR"),
+      },
+      detail: {
+        summary: "Get Products Sales and Profit Report",
+        description:
+          "Get a report of products sold and profit made in a given date range, optionally filtered by branch. The report can be downloaded in CSV or XLSX format.",
+        tags: ["Reports"],
+        responses: {
+          200: {
+            description: "Get Products Sales and Profit Report",
+            content: {
+              "text/csv": {
+                schema: { type: "string" },
+              },
+              "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet":
+                {
+                  schema: { type: "string", format: "binary" },
+                },
+            },
+          },
+        },
+      },
+    },
+  );
