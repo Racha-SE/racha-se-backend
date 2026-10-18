@@ -3,6 +3,7 @@ import { openapi } from "@elysiajs/openapi";
 import { Elysia } from "elysia";
 import { errorHandler } from "@/plugins/error-handler";
 import {
+  analyticsRoute,
   authRoute,
   branchesRoute,
   categoriesRoute,
@@ -78,6 +79,10 @@ export const app = new Elysia()
           { name: "Branches", description: "Branch master data management" },
           { name: "Reports", description: "Sales and profit reports" },
           {
+            name: "Analytics",
+            description: "Sales analytics — best/worst seller rankings",
+          },
+          {
             name: "Mock",
             description:
               "Dev-only reference implementation (model/service/route pattern, and the auth macro pattern)",
@@ -103,7 +108,8 @@ export const app = new Elysia()
       .use(inventoryRoute)
       .use(notificationsRoute)
       .use(branchesRoute)
-      .use(reportsRoute);
+      .use(reportsRoute)
+      .use(analyticsRoute);
 
     // mock routes exist only to demonstrate the architecture — never expose them outside dev
     if (process.env.NODE_ENV === "development") {

@@ -1,0 +1,84 @@
+import { type Static, t } from "elysia";
+import { ProductsModel } from "@/models/products.model";
+
+// UnionEnum rather than t.Union over `.map(t.Literal)`: the mapped form
+// widens to an array of one literal-union type, which Static resolves to
+// `never` — fine for an input, but it breaks the response type below.
+const sellerSortBy = t.UnionEnum(["revenue", "quantity"]);
+
+const SellerRankingQuery = t.Object({
+  from: t.Optional(
+    t.String({
+      format: "date-time",
+      description:
+        "Start of the timeframe, inclusive (ISO 8601 — include the offset, e.g. 2026-10-01T00:00:00+07:00). Defaults to 30 days before `to`.",
+    }),
+  ),
+  to: t.Optional(
+    t.String({
+      format: "date-time",
+      description:
+        "End of the timeframe, exclusive (ISO 8601). Defaults to now.",
+    }),
+  ),
+  limit: t.Optional(
+    t.Numeric({
+      minimum: 1,
+      maximum: 50,
+      multipleOf: 1,
+      description: "How many products to rank. Defaults to 10.",
+    }),
+  ),
+  sortBy: t.Optional(
+    t.UnionEnum(["revenue", "quantity"], {
+      description:
+        "What the ranking is by — `revenue` (quantity × the price each line actually sold at) or `quantity` (units sold). Defaults to `revenue`; the other metric breaks ties.",
+    }),
+  ),
+  branchId: t.Optional(
+    t.Numeric({
+      minimum: 1,
+      multipleOf: 1,
+      description: "Only count sales made at this branch.",
+    }),
+  ),
+  categoryId: t.Optional(
+    t.Numeric({
+      minimum: 1,
+      multipleOf: 1,
+      description: "Only rank products in this category.",
+    }),
+  ),
+});
+
+const SellerRank = t.Object({
+  /** 1-based position in this list — ties still get distinct ranks */
+  rank: t.Integer(),
+  pId: t.Integer(),
+  productName: t.String(),
+  barcode: t.String(),
+  categories: t.Array(ProductsModel.categoryRef),
+  totalRevenue: t.Integer(),
+  totalQuantity: t.Integer(),
+  /** completed customer orders that included this product */
+  orderCount: t.Integer(),
+});
+
+const SellerRankingResponse = t.Object({
+  // The timeframe actually used, with the defaults filled in, so a client
+  // that sent neither bound can still label its chart.
+  from: t.String({ format: "date-time" }),
+  to: t.String({ format: "date-time" }),
+  sortBy: sellerSortBy,
+  result: t.Array(SellerRank),
+});
+
+export const AnalyticsModel = {
+  sellerRankingQuery: SellerRankingQuery,
+  sellerRankingResponse: SellerRankingResponse,
+};
+
+export type SellerSortBy = Static<typeof sellerSortBy>;
+export type SellerRankingQuery = Static<typeof SellerRankingQuery>;
+export type SellerRank = Static<typeof SellerRank>;
+export type SellerRankingResult = Static<typeof SellerRankingResponse>;
