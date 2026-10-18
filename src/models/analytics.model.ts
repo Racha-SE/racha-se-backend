@@ -6,21 +6,31 @@ import { ProductsModel } from "@/models/products.model";
 // `never` — fine for an input, but it breaks the response type below.
 const sellerSortBy = t.UnionEnum(["revenue", "quantity"]);
 
+// Every analytics query takes the same timeframe.
+const from = t.Optional(
+  t.String({
+    format: "date-time",
+    description:
+      "Start of the timeframe, inclusive (ISO 8601 — include the offset, e.g. 2026-10-01T00:00:00+07:00). Defaults to 30 days before `to`.",
+  }),
+);
+const to = t.Optional(
+  t.String({
+    format: "date-time",
+    description: "End of the timeframe, exclusive (ISO 8601). Defaults to now.",
+  }),
+);
+const categoryId = t.Optional(
+  t.Numeric({
+    minimum: 1,
+    multipleOf: 1,
+    description: "Only include products in this category.",
+  }),
+);
+
 const SellerRankingQuery = t.Object({
-  from: t.Optional(
-    t.String({
-      format: "date-time",
-      description:
-        "Start of the timeframe, inclusive (ISO 8601 — include the offset, e.g. 2026-10-01T00:00:00+07:00). Defaults to 30 days before `to`.",
-    }),
-  ),
-  to: t.Optional(
-    t.String({
-      format: "date-time",
-      description:
-        "End of the timeframe, exclusive (ISO 8601). Defaults to now.",
-    }),
-  ),
+  from,
+  to,
   limit: t.Optional(
     t.Numeric({
       minimum: 1,
@@ -42,13 +52,32 @@ const SellerRankingQuery = t.Object({
       description: "Only count sales made at this branch.",
     }),
   ),
-  categoryId: t.Optional(
+  categoryId,
+});
+
+// The branch routes always rank the caller's own branch, so there's no
+// branchId to pass.
+const BranchSellerRankingQuery = t.Omit(SellerRankingQuery, ["branchId"]);
+
+const DeadStockQuery = t.Object({
+  from,
+  to,
+  limit: t.Optional(
     t.Numeric({
       minimum: 1,
+      maximum: 100,
       multipleOf: 1,
-      description: "Only rank products in this category.",
+      description: "Page size. Defaults to 20.",
     }),
   ),
+  offset: t.Optional(
+    t.Numeric({
+      minimum: 0,
+      multipleOf: 1,
+      description: "How many products to skip. Defaults to 0.",
+    }),
+  ),
+  categoryId,
 });
 
 const SellerRank = t.Object({
@@ -73,12 +102,38 @@ const SellerRankingResponse = t.Object({
   result: t.Array(SellerRank),
 });
 
+const DeadStockItem = t.Object({
+  pId: t.Integer(),
+  productName: t.String(),
+  barcode: t.String(),
+  categories: t.Array(ProductsModel.categoryRef),
+  /** units on hand at the branch, summed across its unexpired lots */
+  onHandQuantity: t.Integer(),
+  /** the branch's latest completed sale of it, at any time — null if never */
+  lastSoldAt: t.Nullable(t.String({ format: "date-time" })),
+});
+
+const DeadStockResponse = t.Object({
+  from: t.String({ format: "date-time" }),
+  to: t.String({ format: "date-time" }),
+  /** every dead-stock product, not just this page */
+  totalCount: t.Integer(),
+  result: t.Array(DeadStockItem),
+});
+
 export const AnalyticsModel = {
   sellerRankingQuery: SellerRankingQuery,
+  branchSellerRankingQuery: BranchSellerRankingQuery,
   sellerRankingResponse: SellerRankingResponse,
+  deadStockQuery: DeadStockQuery,
+  deadStockResponse: DeadStockResponse,
 };
 
 export type SellerSortBy = Static<typeof sellerSortBy>;
 export type SellerRankingQuery = Static<typeof SellerRankingQuery>;
+export type BranchSellerRankingQuery = Static<typeof BranchSellerRankingQuery>;
 export type SellerRank = Static<typeof SellerRank>;
 export type SellerRankingResult = Static<typeof SellerRankingResponse>;
+export type DeadStockQuery = Static<typeof DeadStockQuery>;
+export type DeadStockItem = Static<typeof DeadStockItem>;
+export type DeadStockResult = Static<typeof DeadStockResponse>;
