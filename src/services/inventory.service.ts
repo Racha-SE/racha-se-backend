@@ -52,7 +52,8 @@ function onHandLots(): SQL | undefined {
   );
 }
 
-function branchOnHandLots(): SQL | undefined {
+// Also what analytics' dead-stock list counts as "on hand", so the two agree.
+export function branchOnHandLots(): SQL | undefined {
   return and(
     eq(order.status, "completed"),
     gt(branchOrderDetail.remain, 0),
