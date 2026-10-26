@@ -1,3 +1,4 @@
+export * from "./analytics.route";
 export * from "./auth.route";
 export * from "./branches.route";
 export * from "./categories.route";
