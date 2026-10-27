@@ -5,7 +5,12 @@ import { authPlugin } from "@/plugins/auth.plugin";
 import { reportsService } from "@/services/reports.service";
 import { ReportQueryModel } from "@/models/reports.model";
 import { type ReportResult } from "@/models/reports.model";
-import { type UserType, tErrorResponse, toActor } from "@/utils";
+import {
+  type UserType,
+  tErrorResponse,
+  toActor,
+  successResponse,
+} from "@/utils";
 
 // HQ and Branch accounts can view reports.
 const READ_REPORT_TYPES: UserType[] = ["hq", "branch"];
@@ -94,6 +99,9 @@ export const reportsRoute = new Elysia({ prefix: "/reports" })
             },
           });
         }
+        case "json": {
+          return successResponse({ result: reportData });
+        }
       }
     },
     {
@@ -121,6 +129,9 @@ export const reportsRoute = new Elysia({ prefix: "/reports" })
                 {
                   schema: { type: "string", format: "binary" },
                 },
+              "application/json": {
+                schema: { type: "object" },
+              },
             },
           },
         },
