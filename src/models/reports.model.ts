@@ -3,7 +3,7 @@ import { t, Static } from "elysia";
 export const ReportQueryModel = t.Object({
   startDate: t.String({ format: "date", description: "YYYY-MM-DD" }),
   endDate: t.String({ format: "date", description: "YYYY-MM-DD" }),
-  format: t.Union([t.Literal("csv"), t.Literal("xlsx")]),
+  format: t.Union([t.Literal("csv"), t.Literal("xlsx"), t.Literal("json")]),
   branchId: t.Optional(t.Numeric({ minimum: 1 })),
 });
 
