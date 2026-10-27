@@ -126,6 +126,26 @@ docker compose down                                       # stop and remove cont
 
 Migrations are **not** run automatically on container start — deliberately, to avoid every replica racing to migrate concurrently in a hypothetical multi-instance setup. Run `docker compose run --rm backend bun run db:migrate` (or `bun run db:migrate` from the host against the same DB) before starting `backend` against a fresh database, or `/api/v1/mock/users` will fail with "relation does not exist".
 
+## Production deploy
+
+`docker-compose.prod.yml` is a **standalone** compose file (not an overlay on `docker-compose.yml`) covering `backend`, `db`, and `frontend` together — frontend's build context is `../racha-se-frontend`, so this repo and [`racha-se-frontend`](https://github.com/Racha-SE/racha-se-frontend) must be cloned as sibling directories on the deploy host.
+
+No service publishes a host port. `frontend` joins an external `edge` docker network (alias `racha-frontend`) so a shared reverse-proxy on the box can route a public hostname to it over TLS — `backend` and `db` are reachable only from inside this compose project.
+
+```bash
+docker network create edge                                       # once, if it doesn't exist yet
+docker compose -f docker-compose.prod.yml up -d --build
+docker compose -f docker-compose.prod.yml run --rm backend bun run db:migrate   # before first boot against a fresh DB
+```
+
+Needs a production `.env` (same keys as `.env.example`, pointed at real values) plus `VITE_API_BASE_URL` for the frontend build, e.g.:
+
+```env
+CORS_ORIGIN=https://racha-se.nayac08.win
+BETTER_AUTH_URL=https://racha-se.nayac08.win
+VITE_API_BASE_URL=https://racha-se.nayac08.win/api/v1
+```
+
 ## Database
 
 Schema lives in `src/db/schema/` ([Drizzle ORM](https://orm.drizzle.team), Postgres dialect), connected via `src/db/client.ts` using Bun's built-in `Bun.sql` (`drizzle-orm/bun-sql` driver — no extra DB driver dependency).
