@@ -86,11 +86,19 @@ function patchReceive(lotId: number, cookie?: string): Promise<Response> {
   );
 }
 
-function patchReject(lotId: number, cookie?: string): Promise<Response> {
+function patchReject(
+  lotId: number,
+  cookie?: string,
+  body: unknown = { rejectReason: "out of stock" },
+): Promise<Response> {
   return app.handle(
     new Request(`http://localhost/orders/branch/${lotId}/reject`, {
       method: "PATCH",
-      headers: { ...(cookie ? { Cookie: cookie } : {}) },
+      headers: {
+        "Content-Type": "application/json",
+        ...(cookie ? { Cookie: cookie } : {}),
+      },
+      body: JSON.stringify(body),
     }),
   );
 }
@@ -407,8 +415,22 @@ describe("PATCH /orders/branch/:lotId/reject", () => {
 
     expect(response.status).toBe(200);
     expect(body.success).toBe(true);
-    expect(body.data).toMatchObject({ lotId, status: "rejected" });
+    expect(body.data).toMatchObject({
+      lotId,
+      status: "rejected",
+      rejectReason: "out of stock",
+    });
     expect(body.data.items[0]).toMatchObject({ pId, amount: 4 });
+  });
+
+  test("returns 422 when rejectReason is missing or empty", async () => {
+    const pId = await fixture.createProduct();
+    const lotId = await requestOrder(pId, 1);
+
+    expect((await patchReject(lotId, hqCookie, {})).status).toBe(422);
+    expect(
+      (await patchReject(lotId, hqCookie, { rejectReason: "" })).status,
+    ).toBe(422);
   });
 
   test("returns 404 with an AppError envelope for an unknown lotId", async () => {

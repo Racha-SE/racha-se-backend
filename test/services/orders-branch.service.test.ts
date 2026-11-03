@@ -43,8 +43,13 @@ function approveOrder(lotId: number): Promise<OrdersBranchApproveResponse> {
   return ordersBranchService.approve(lotId, fixture.hqUser.id);
 }
 
-function rejectOrder(lotId: number): Promise<OrdersBranchRejectResponse> {
-  return ordersBranchService.reject(lotId);
+const REJECT_REASON = "out of stock";
+
+function rejectOrder(
+  lotId: number,
+  rejectReason = REJECT_REASON,
+): Promise<OrdersBranchRejectResponse> {
+  return ordersBranchService.reject(lotId, rejectReason);
 }
 
 async function expectAppError(promise: Promise<unknown>): Promise<AppError> {
@@ -448,6 +453,7 @@ describe("ordersBranchService.reject", () => {
 
     expect(result.lotId).toBe(requested.lotId);
     expect(result.status).toBe("rejected");
+    expect(result.rejectReason).toBe(REJECT_REASON);
 
     expect(result.items).toHaveLength(1);
     expect(result.items[0]).toMatchObject({ pId, amount: 4, remain: 0 });
