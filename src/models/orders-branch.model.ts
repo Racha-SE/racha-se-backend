@@ -117,6 +117,3 @@ export type OrdersBranchApproveResponse = Static<
 export type OrdersBranchRejectResponse = Static<
   typeof OrdersBranchModel.rejectResponse
 >;
-export type OrdersBranchRejectBody = Static<
-  typeof OrdersBranchModel.rejectBody
->;
