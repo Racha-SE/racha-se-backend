@@ -457,13 +457,16 @@ export const ordersBranchService = {
    * the HQ lots are only drawn on at approve, so a request that never got
    * there never held any stock.
    */
-  async reject(lotId: number): Promise<OrdersBranchRejectResponse> {
+  async reject(
+    lotId: number,
+    rejectReason: string,
+  ): Promise<OrdersBranchRejectResponse> {
     return db.transaction(async (tx) => {
       await lockOrder(tx, lotId);
 
       const [rejected] = await tx
         .update(order)
-        .set({ status: "rejected" })
+        .set({ status: "rejected", rejectReason })
         .where(eq(order.lotId, lotId))
         .returning();
 

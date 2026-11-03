@@ -126,11 +126,12 @@ export const ordersBranchRoute = new Elysia({ prefix: "/orders/branch" })
   )
   .patch(
     "/:lotId/reject",
-    async ({ params: { lotId } }) =>
-      successResponse(await ordersBranchService.reject(lotId)),
+    async ({ params: { lotId }, body: { rejectReason } }) =>
+      successResponse(await ordersBranchService.reject(lotId, rejectReason)),
     {
       auth: ["hq"],
       params: OrdersBranchModel.params,
+      body: OrdersBranchModel.rejectBody,
       response: {
         200: tSuccessResponse(OrdersBranchModel.rejectResponse),
         400: tErrorResponse("BAD_REQUEST"),

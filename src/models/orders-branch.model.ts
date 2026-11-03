@@ -87,6 +87,9 @@ export const OrdersBranchModel = {
   detail: BranchOrderView,
   createResponse: orderWithItems,
   approveResponse: orderWithItems,
+  rejectBody: t.Object({
+    rejectReason: t.String({ minLength: 1, maxLength: 255 }),
+  }),
   rejectResponse: orderWithItems,
   receiveResponse: t.Object({
     message: t.String(),
@@ -113,4 +116,7 @@ export type OrdersBranchApproveResponse = Static<
 >;
 export type OrdersBranchRejectResponse = Static<
   typeof OrdersBranchModel.rejectResponse
+>;
+export type OrdersBranchRejectBody = Static<
+  typeof OrdersBranchModel.rejectBody
 >;
