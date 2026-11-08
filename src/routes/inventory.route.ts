@@ -58,4 +58,26 @@ export const inventoryRoute = new Elysia({ prefix: "/inventory" })
         tags: ["Inventory"],
       },
     },
+  )
+
+  .get(
+    "/branches",
+    async ({ user, query }) =>
+      successResponse(
+        await inventoryService.getAllBranchStock(toActor(user), query),
+      ),
+
+    {
+      auth: ["hq"],
+      query: InventoryModel.getBranchInventoryQuery,
+      response: getBranchInventoryResponse,
+      detail: {
+        summary: "View combined stock across all active branches",
+        description:
+          "Stock on hand across every active branch (HQ warehouse excluded). " +
+          "`groupBy=false` (default) lists each branch lot; `groupBy=true` " +
+          "sums every branch's lots into one total per product.",
+        tags: ["Inventory"],
+      },
+    },
   );
