@@ -43,8 +43,12 @@ const DEMO_HQ = {
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
+// Same rule as POST /orders/hq: expiry is 23:59:59.999 Bangkok time of that day.
 function daysFromNow(days: number): Date {
-  return new Date(Date.now() + days * DAY_MS);
+  const day = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Bangkok",
+  }).format(new Date(Date.now() + days * DAY_MS));
+  return new Date(`${day}T23:59:59.999+07:00`);
 }
 
 const SUPPLIERS = {
