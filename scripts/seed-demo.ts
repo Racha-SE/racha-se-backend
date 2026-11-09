@@ -41,12 +41,11 @@ const DEMO_HQ = {
   lastname: "HQ",
 };
 
-// Same rule as POST /orders/hq: expiry is the end of the day, stored as local
-// 00:00 of the following day.
+// Same rule as POST /orders/hq: expiry is 23:59:59.999 local time of that day.
 function daysFromNow(days: number): Date {
   const date = new Date();
-  date.setHours(0, 0, 0, 0);
-  date.setDate(date.getDate() + days + 1);
+  date.setDate(date.getDate() + days);
+  date.setHours(23, 59, 59, 999);
   return date;
 }
 

@@ -131,13 +131,14 @@ describe("POST /orders/hq", () => {
       remain: 6,
       costPrice: 25,
     });
-    // 00:00 of the day after the sent date, in the sent offset (here UTC)
-    const endOfDay = new Date(expiredDate.toISOString().slice(0, 10));
-    endOfDay.setUTCDate(endOfDay.getUTCDate() + 1);
+    // 23:59:59.999 of the sent date, in the sent offset (here UTC)
+    const endOfDay = new Date(
+      `${expiredDate.toISOString().slice(0, 10)}T23:59:59.999Z`,
+    );
     expect(new Date(body.data.items[0].expiredDate)).toEqual(endOfDay);
   });
 
-  test("snaps expiredDate to the next 00:00 in the client's own offset", async () => {
+  test("snaps expiredDate to 23:59:59.999 of that day in the client's own offset", async () => {
     const pId = await fixture.createProduct();
     const day = daysFromNow(10).toISOString().slice(0, 10);
 
@@ -159,7 +160,7 @@ describe("POST /orders/hq", () => {
 
     expect(response.status).toBe(201);
     expect(new Date(body.data.items[0].expiredDate)).toEqual(
-      new Date(new Date(`${day}T00:00:00+07:00`).getTime() + 86400000),
+      new Date(`${day}T23:59:59.999+07:00`),
     );
   });
 
