@@ -131,37 +131,69 @@ describe("POST /orders/hq", () => {
       remain: 6,
       costPrice: 25,
     });
-    // 23:59:59.999 of the sent date, in the sent offset (here UTC)
+    // 23:59:59.999 Bangkok time of the sent date, whatever offset was sent
     const endOfDay = new Date(
-      `${expiredDate.toISOString().slice(0, 10)}T23:59:59.999Z`,
+      `${expiredDate.toISOString().slice(0, 10)}T23:59:59.999+07:00`,
     );
     expect(new Date(body.data.items[0].expiredDate)).toEqual(endOfDay);
   });
 
-  test("snaps expiredDate to 23:59:59.999 of that day in the client's own offset", async () => {
-    const pId = await fixture.createProduct();
-    const day = daysFromNow(10).toISOString().slice(0, 10);
+  const bangkokDay = (offsetDays: number) =>
+    new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Bangkok" }).format(
+      new Date(Date.now() + offsetDays * 24 * 60 * 60 * 1000),
+    );
 
-    const response = await postOrder(
+  async function postExpiry(expiredDate: string) {
+    const pId = await fixture.createProduct();
+    return postOrder(
       {
         items: [
           {
             pId,
             supplierId: fixture.supplierId,
             amount: 1,
-            expiredDate: `${day}T08:30:00+07:00`,
+            expiredDate,
             costPrice: 1,
           },
         ],
       },
       hqCookie,
     );
-    const body = (await response.json()) as SuccessBody<OrdersHqCreateResponse>;
+  }
+
+  const day = bangkokDay(10);
+  test.each([
+    ["date only", day],
+    ["Z offset", `${day}T23:59:59.999Z`],
+    ["+07:00 offset", `${day}T08:30:00+07:00`],
+    ["+0700 offset", `${day}T08:30:00+0700`],
+    ["space separator", `${day} 08:30:00Z`],
+  ])(
+    "pins expiredDate to 23:59:59.999+07:00 of the date (%s)",
+    async (_, input) => {
+      const response = await postExpiry(input);
+      const body =
+        (await response.json()) as SuccessBody<OrdersHqCreateResponse>;
+
+      expect(response.status).toBe(201);
+      expect(new Date(body.data.items[0].expiredDate)).toEqual(
+        new Date(`${day}T23:59:59.999+07:00`),
+      );
+    },
+  );
+
+  test("rejects yesterday (Bangkok) with a VALIDATION error", async () => {
+    const response = await postExpiry(bangkokDay(-1));
+    const body = (await response.json()) as ErrorBody;
+
+    expect(response.status).toBeGreaterThanOrEqual(400);
+    expect(body.error.code).toBe("VALIDATION");
+  });
+
+  test("accepts today (Bangkok), which is good until 23:59:59.999", async () => {
+    const response = await postExpiry(bangkokDay(0));
 
     expect(response.status).toBe(201);
-    expect(new Date(body.data.items[0].expiredDate)).toEqual(
-      new Date(`${day}T23:59:59.999+07:00`),
-    );
   });
 
   test("resolves the product's open HQ min_stock alert", async () => {
