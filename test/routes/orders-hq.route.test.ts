@@ -131,7 +131,36 @@ describe("POST /orders/hq", () => {
       remain: 6,
       costPrice: 25,
     });
-    expect(new Date(body.data.items[0].expiredDate)).toEqual(expiredDate);
+    // 00:00 of the day after the sent date, in the sent offset (here UTC)
+    const endOfDay = new Date(expiredDate.toISOString().slice(0, 10));
+    endOfDay.setUTCDate(endOfDay.getUTCDate() + 1);
+    expect(new Date(body.data.items[0].expiredDate)).toEqual(endOfDay);
+  });
+
+  test("snaps expiredDate to the next 00:00 in the client's own offset", async () => {
+    const pId = await fixture.createProduct();
+    const day = daysFromNow(10).toISOString().slice(0, 10);
+
+    const response = await postOrder(
+      {
+        items: [
+          {
+            pId,
+            supplierId: fixture.supplierId,
+            amount: 1,
+            expiredDate: `${day}T08:30:00+07:00`,
+            costPrice: 1,
+          },
+        ],
+      },
+      hqCookie,
+    );
+    const body = (await response.json()) as SuccessBody<OrdersHqCreateResponse>;
+
+    expect(response.status).toBe(201);
+    expect(new Date(body.data.items[0].expiredDate)).toEqual(
+      new Date(new Date(`${day}T00:00:00+07:00`).getTime() + 86400000),
+    );
   });
 
   test("resolves the product's open HQ min_stock alert", async () => {

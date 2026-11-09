@@ -17,9 +17,18 @@ const lineItem = t.Object({
   expiredDate: t
     .Transform(t.String({ format: "date-time" }))
     .Decode((date) => {
-      if (new Date(date) < new Date())
+      // A label expiry is a calendar day, good through the end of it: snap to
+      // 00:00 of the next day in the offset the client sent (the user's own
+      // time), so `expiredDate > now` stays true for the whole day.
+      const [, day, offset] = date.match(
+        /^(\d{4}-\d{2}-\d{2})T.*(Z|[+-]\d{2}:\d{2})$/i,
+      )!;
+      const expiry = new Date(
+        new Date(`${day}T00:00:00${offset}`).getTime() + 24 * 60 * 60 * 1000,
+      );
+      if (expiry <= new Date())
         throw new AppError("VALIDATION", { message: "incorrect expired date" });
-      return date;
+      return expiry.toISOString();
     })
     .Encode((date) => date),
   costPrice: t.Number({ minimum: 0 }),
