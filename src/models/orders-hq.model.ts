@@ -1,5 +1,5 @@
 import { headOrderDetail, order } from "@/db/schema";
-import { AppError } from "@/utils";
+import { endOfBangkokDay } from "@/utils/date";
 import { createSelectSchema } from "drizzle-typebox";
 import { Static, t } from "elysia";
 
@@ -20,12 +20,8 @@ const lineItem = t.Object({
       // A label expiry is a calendar day, good through the end of it: snap to
       // 23:59:59.999 of that day in the offset the client sent (the user's
       // own time).
-      const [, day, offset] = date.match(
-        /^(\d{4}-\d{2}-\d{2})T.*(Z|[+-]\d{2}:\d{2})$/i,
-      )!;
-      const expiry = new Date(`${day}T23:59:59.999${offset}`);
-      if (expiry <= new Date())
-        throw new AppError("VALIDATION", { message: "incorrect expired date" });
+      const day = date.slice(0, 10);
+      const expiry = endOfBangkokDay(day);
       return expiry.toISOString();
     })
     .Encode((date) => date),

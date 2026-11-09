@@ -76,12 +76,14 @@ const EXPIRED_PAST_MIN_DAYS = 1;
 const EXPIRED_PAST_MAX_DAYS = 30;
 const SCALE_PASSWORD = "DemoScale123!";
 
-// Same rule as POST /orders/hq: expiry is 23:59:59.999 local time of that day.
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+// Same rule as POST /orders/hq: expiry is 23:59:59.999 Bangkok time of that day.
 function daysFromNow(days: number): Date {
-  const date = new Date();
-  date.setDate(date.getDate() + days);
-  date.setHours(23, 59, 59, 999);
-  return date;
+  const day = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Bangkok",
+  }).format(new Date(Date.now() + days * DAY_MS));
+  return new Date(`${day}T23:59:59.999+07:00`);
 }
 
 function randInt(min: number, max: number): number {
