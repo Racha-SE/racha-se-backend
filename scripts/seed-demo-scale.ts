@@ -76,9 +76,13 @@ const EXPIRED_PAST_MIN_DAYS = 1;
 const EXPIRED_PAST_MAX_DAYS = 30;
 const SCALE_PASSWORD = "DemoScale123!";
 
-const DAY_MS = 24 * 60 * 60 * 1000;
+// Same rule as POST /orders/hq: expiry is the end of the day, stored as local
+// 00:00 of the following day.
 function daysFromNow(days: number): Date {
-  return new Date(Date.now() + days * DAY_MS);
+  const date = new Date();
+  date.setHours(0, 0, 0, 0);
+  date.setDate(date.getDate() + days + 1);
+  return date;
 }
 
 function randInt(min: number, max: number): number {
