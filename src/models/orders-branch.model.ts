@@ -9,7 +9,7 @@ const branchEntity = createSelectSchema(branch);
 
 const requestLineItem = t.Object({
   pId: t.Number(),
-  amount: t.Integer({ minimum: 1 }),
+  amount: t.Integer({ minimum: 1, maximum: 10000 }),
 });
 
 const lineItemView = t.Composite([
@@ -69,12 +69,12 @@ export const OrdersBranchModel = {
   getBranchOrdersQuery: GetBranchOrdersQuery,
   createBody: t.Object({
     items: t
-      .Transform(t.Array(requestLineItem, { minItems: 1 }))
+      .Transform(t.Array(requestLineItem, { minItems: 1, maxItems: 100 }))
       .Decode((items) => {
         const checkedItems = new Set<number>();
         for (const item of items) {
           if (checkedItems.has(item.pId)) {
-            throw new AppError("VALIDATION");
+            throw new AppError("VALIDATION", { message: "duplicate products" });
           }
           checkedItems.add(item.pId);
         }
