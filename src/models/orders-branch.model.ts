@@ -8,7 +8,7 @@ const branchOrderDetailEntity = createSelectSchema(branchOrderDetail);
 const branchEntity = createSelectSchema(branch);
 
 const requestLineItem = t.Object({
-  pId: t.Number(),
+  pId: t.Numeric({ minimum: 1 }),
   amount: t.Integer({ minimum: 1, maximum: 10000 }),
 });
 

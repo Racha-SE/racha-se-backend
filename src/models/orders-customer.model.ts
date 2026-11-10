@@ -13,7 +13,7 @@ const customerOrderDetailEntity = createSelectSchema(customerOrderDetail);
 const branchEntity = createSelectSchema(branch);
 
 const requestLineItem = t.Object({
-  pId: t.Number(),
+  pId: t.Numeric({ minimum: 1 }),
   quantity: t.Integer({ minimum: 1, maximum: 10000 }),
 });
 
