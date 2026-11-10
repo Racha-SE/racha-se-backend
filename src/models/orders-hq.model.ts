@@ -11,8 +11,8 @@ const orderEntity = createSelectSchema(order);
 const headOrderEntity = createSelectSchema(headOrderDetail);
 
 const lineItem = t.Object({
-  pId: t.Number(),
-  supplierId: t.Number(),
+  pId: t.Numeric({ minimum: 1 }),
+  supplierId: t.Numeric({ minimum: 1 }),
   amount: t.Number({ minimum: 1, maximum: 10000 }),
   expiredDate: t
     .Transform(t.String({ format: "date-time" }))
