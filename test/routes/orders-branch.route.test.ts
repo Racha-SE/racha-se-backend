@@ -423,14 +423,14 @@ describe("PATCH /orders/branch/:lotId/reject", () => {
     expect(body.data.items[0]).toMatchObject({ pId, amount: 4 });
   });
 
-  test("returns 422 when rejectReason is missing or empty", async () => {
+  test("returns 400 when rejectReason is missing or empty", async () => {
     const pId = await fixture.createProduct();
     const lotId = await requestOrder(pId, 1);
 
-    expect((await patchReject(lotId, hqCookie, {})).status).toBe(422);
+    expect((await patchReject(lotId, hqCookie, {})).status).toBe(400);
     expect(
       (await patchReject(lotId, hqCookie, { rejectReason: "" })).status,
-    ).toBe(422);
+    ).toBe(400);
   });
 
   test("returns 404 with an AppError envelope for an unknown lotId", async () => {
