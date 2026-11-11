@@ -5,6 +5,7 @@ import type {
   OrdersBranchGetByLotIdResponse,
   OrdersBranchGetResponse,
   OrdersBranchQuery,
+  OrdersBranchReceiveBody,
   OrdersBranchRejectResponse,
 } from "@/models/orders-branch.model";
 import { db } from "@/db/client";
@@ -78,6 +79,72 @@ async function lockOrder(
   }
 
   return { ...existing.order, branchId: existing.branchId };
+}
+
+type OrdersBranchReceiveItem = NonNullable<
+  NonNullable<OrdersBranchReceiveBody>["items"]
+>[number];
+
+/**
+ * Writes what the branch counted onto the order's lines. The receipt has to
+ * account for every line - a line left out would otherwise be signed for at
+ * the approved amount without anyone having counted it - and can't claim more
+ * than HQ sent. At this point (status "approved") nothing has been sold out
+ * of the lines yet, so `remain` is still exactly the approved quantity.
+ */
+async function recordReceivedLines(
+  tx: Transaction,
+  lines: { bodId: number; remain: number }[],
+  items: OrdersBranchReceiveItem[],
+  now: Date,
+) {
+  const received = new Map(items.map((item) => [item.bodId, item]));
+
+  const unknown = items.find(
+    (item) => !lines.some((line) => line.bodId === item.bodId),
+  );
+  if (unknown) {
+    throw new AppError("BAD_REQUEST", {
+      message: `Line ${unknown.bodId} is not part of this order`,
+      bodId: unknown.bodId,
+    });
+  }
+
+  for (const line of lines) {
+    const item = received.get(line.bodId);
+
+    if (!item) {
+      throw new AppError("BAD_REQUEST", {
+        message: `Line ${line.bodId} has no received quantity`,
+        bodId: line.bodId,
+      });
+    }
+
+    if (item.receivedQty > line.remain) {
+      throw new AppError("BAD_REQUEST", {
+        message: `Line ${line.bodId} received more than was approved`,
+        bodId: line.bodId,
+        approved: line.remain,
+        received: item.receivedQty,
+      });
+    }
+  }
+
+  await tx.execute(sql`
+    update ${branchOrderDetail}
+    set ${sql.identifier("remain")} = v.remain,
+        ${sql.identifier("expired_date")} = v.expired_date,
+        ${sql.identifier("updated_at")} = ${utcTimestamp(now)}
+    from (values ${sql.join(
+      items.map(
+        ({ bodId, receivedQty, expiredDate }) =>
+          sql`(${bodId}::int, ${receivedQty}::int, ${utcTimestamp(new Date(expiredDate))})`,
+      ),
+      sql`, `,
+    )})
+      as v(bod_id, remain, expired_date)
+    where ${branchOrderDetail.bodId} = v.bod_id
+  `);
 }
 
 export const ordersBranchService = {
@@ -492,17 +559,27 @@ export const ordersBranchService = {
   // notification.service.ts's top comment.
   //
   // The head_order_detail deduction the TODO above asks for already happens
-  // in `create`: picking the lots is what reserves them, so `remain` came
-  // down there, branch_order_allocation recorded which lots it came off, and
-  // quantity/expiry/price were copied into branch_order_detail at the same
-  // time. Nothing is left to move here.
+  // in `approve`: picking the lots is what reserves them, so `remain` came
+  // down there, and quantity/expiry/cost were copied into branch_order_detail
+  // at the same time. Nothing is taken off HQ here.
   //
   // What receipt does is flip the order to "completed". That's the line
   // between reserved and on hand - a branch_order_detail row only counts as
-  // branch stock once its order is completed, the same way `create` only
+  // branch stock once its order is completed, the same way `approve` only
   // draws from head_order_detail rows whose order is approved. It's also the
   // point HQ's post-deduction level is settled enough to raise an alert on.
-  async receive(lotid: number, branchId?: number) {
+  //
+  // `items` is what the branch actually counted. Without it the delivery is
+  // signed for exactly as approved. With it, each line's `remain` becomes the
+  // received quantity and its expiry the one printed on what arrived. A short
+  // line keeps `amount` at what HQ sent, so the gap stays on record; the
+  // missing units are not handed back to HQ - they left the warehouse and
+  // never made it, which is a loss, not stock HQ still holds.
+  async receive(
+    lotid: number,
+    branchId?: number,
+    items?: OrdersBranchReceiveItem[],
+  ) {
     const now = new Date();
 
     return db.transaction(async (tx) => {
@@ -523,9 +600,17 @@ export const ordersBranchService = {
       }
 
       const details = await tx
-        .select({ pId: branchOrderDetail.pId })
+        .select({
+          bodId: branchOrderDetail.bodId,
+          pId: branchOrderDetail.pId,
+          remain: branchOrderDetail.remain,
+        })
         .from(branchOrderDetail)
         .where(eq(branchOrderDetail.lotId, lotid));
+
+      if (items) {
+        await recordReceivedLines(tx, details, items, now);
+      }
 
       const pIds = [...new Set(details.map((detail) => detail.pId))];
 

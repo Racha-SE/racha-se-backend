@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { Elysia } from "elysia";
 import { eq, max } from "drizzle-orm";
 import { db } from "@/db/client";
-import { order, product } from "@/db/schema";
+import { branchOrderDetail, order, product } from "@/db/schema";
 import type {
   OrdersBranchApproveResponse,
   OrdersBranchCreateResponse,
@@ -77,11 +77,19 @@ function patchApprove(lotId: number, cookie?: string): Promise<Response> {
   );
 }
 
-function patchReceive(lotId: number, cookie?: string): Promise<Response> {
+function patchReceive(
+  lotId: number,
+  cookie?: string,
+  body?: unknown,
+): Promise<Response> {
   return app.handle(
     new Request(`http://localhost/orders/branch/${lotId}/receive`, {
       method: "PATCH",
-      headers: cookie ? { Cookie: cookie } : {},
+      headers: {
+        ...(body !== undefined ? { "Content-Type": "application/json" } : {}),
+        ...(cookie ? { Cookie: cookie } : {}),
+      },
+      ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
     }),
   );
 }
@@ -304,7 +312,7 @@ describe("PATCH /orders/branch/:lotId/approve", () => {
 
 describe("PATCH /orders/branch/:lotId/receive", () => {
   /** an approved order waiting for the branch to sign for it */
-  async function approvedOrder(): Promise<number> {
+  async function approvedOrderWithLines(): Promise<OrdersBranchCreateResponse> {
     const pId = await fixture.createProduct();
     await fixture.createHqLot({
       pId,
@@ -319,8 +327,105 @@ describe("PATCH /orders/branch/:lotId/receive", () => {
       (await response.json()) as SuccessBody<OrdersBranchCreateResponse>;
     await fixture.approveBranchOrder(data.lotId);
 
-    return data.lotId;
+    return data;
   }
+
+  async function approvedOrder(): Promise<number> {
+    return (await approvedOrderWithLines()).lotId;
+  }
+
+  async function readLine(lotId: number) {
+    const [line] = await db
+      .select()
+      .from(branchOrderDetail)
+      .where(eq(branchOrderDetail.lotId, lotId));
+    return line;
+  }
+
+  test("an empty JSON body receives the order as approved", async () => {
+    const lotId = await approvedOrder();
+
+    const response = await patchReceive(lotId, branchCookie, {});
+
+    expect(response.status).toBe(200);
+    expect((await readLine(lotId)).remain).toBe(4);
+  });
+
+  test("records the counted quantity and expiry for each line", async () => {
+    const { lotId, items } = await approvedOrderWithLines();
+    const expiredDate = daysFromNow(40);
+
+    const response = await patchReceive(lotId, branchCookie, {
+      items: [
+        {
+          bodId: items[0].bodId,
+          receivedQty: 3,
+          expiredDate: expiredDate.toISOString(),
+        },
+      ],
+    });
+
+    expect(response.status).toBe(200);
+    const line = await readLine(lotId);
+    expect(line).toMatchObject({ amount: 4, remain: 3 });
+    expect(line.expiredDate).toEqual(expiredDate);
+  });
+
+  test("returns 400 when a line is listed twice", async () => {
+    const { lotId, items } = await approvedOrderWithLines();
+    const line = {
+      bodId: items[0].bodId,
+      receivedQty: 2,
+      expiredDate: daysFromNow(40).toISOString(),
+    };
+
+    const response = await patchReceive(lotId, branchCookie, {
+      items: [line, line],
+    });
+    const body = (await response.json()) as ErrorBody;
+
+    expect(response.status).toBe(400);
+    expect(body.success).toBe(false);
+  });
+
+  test("returns 400 for an expiry date in the past", async () => {
+    const { lotId, items } = await approvedOrderWithLines();
+
+    const response = await patchReceive(lotId, branchCookie, {
+      items: [
+        {
+          bodId: items[0].bodId,
+          receivedQty: 4,
+          expiredDate: daysFromNow(-1).toISOString(),
+        },
+      ],
+    });
+
+    expect(response.status).toBe(400);
+    const [received] = await db
+      .select()
+      .from(order)
+      .where(eq(order.lotId, lotId));
+    expect(received.status).toBe("approved");
+  });
+
+  test("returns 400 when more arrived than was approved", async () => {
+    const { lotId, items } = await approvedOrderWithLines();
+
+    const response = await patchReceive(lotId, branchCookie, {
+      items: [
+        {
+          bodId: items[0].bodId,
+          receivedQty: 5,
+          expiredDate: daysFromNow(40).toISOString(),
+        },
+      ],
+    });
+    const body = (await response.json()) as ErrorBody;
+
+    expect(response.status).toBe(400);
+    expect(body.error.code).toBe("BAD_REQUEST");
+  });
 
   test("confirms receipt and completes the order", async () => {
     const lotId = await approvedOrder();
