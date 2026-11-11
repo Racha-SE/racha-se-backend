@@ -748,6 +748,160 @@ describe("ordersBranchService.receive", () => {
   });
 });
 
+describe("ordersBranchService.receive — with counted items", () => {
+  async function readLines(lotId: number) {
+    return db
+      .select()
+      .from(branchOrderDetail)
+      .where(eq(branchOrderDetail.lotId, lotId))
+      .orderBy(branchOrderDetail.bodId);
+  }
+
+  test("records the quantity and expiry that actually arrived", async () => {
+    const pId = await fixture.createProduct();
+    const { lotId } = await fixture.createHqLot({
+      pId,
+      remain: 10,
+      expiredDate: daysFromNow(30),
+    });
+    const created = await approvedOrder([{ pId, amount: 5 }]);
+    const [line] = created.items;
+    const countedExpiry = daysFromNow(45);
+
+    await ordersBranchService.receive(created.lotId, fixture.branchId, [
+      {
+        bodId: line.bodId,
+        receivedQty: 3,
+        expiredDate: countedExpiry.toISOString(),
+      },
+    ]);
+
+    const [received] = await readLines(created.lotId);
+    // amount keeps what HQ sent so the shortfall of 2 stays on record; only
+    // the 3 that arrived count as branch stock
+    expect(received).toMatchObject({ amount: 5, remain: 3 });
+    expect(received.expiredDate).toEqual(countedExpiry);
+    expect((await readOrder(created.lotId)).status).toBe("completed");
+    // the missing 2 left HQ and never arrived - they aren't handed back
+    expect((await readHqLot(lotId)).remain).toBe(5);
+  });
+
+  test("accepts a line where nothing arrived", async () => {
+    const first = await fixture.createProduct();
+    const second = await fixture.createProduct();
+    for (const pId of [first, second]) {
+      await fixture.createHqLot({
+        pId,
+        remain: 10,
+        expiredDate: daysFromNow(30),
+      });
+    }
+    const created = await approvedOrder([
+      { pId: first, amount: 2 },
+      { pId: second, amount: 4 },
+    ]);
+    const expiredDate = daysFromNow(20).toISOString();
+
+    await ordersBranchService.receive(
+      created.lotId,
+      fixture.branchId,
+      created.items.map((item) => ({
+        bodId: item.bodId,
+        receivedQty: item.pId === first ? 0 : 4,
+        expiredDate,
+      })),
+    );
+
+    const lines = await readLines(created.lotId);
+    expect(lines.find((l) => l.pId === first)?.remain).toBe(0);
+    expect(lines.find((l) => l.pId === second)?.remain).toBe(4);
+  });
+
+  test("refuses more than was approved, and changes nothing", async () => {
+    const pId = await fixture.createProduct();
+    await fixture.createHqLot({
+      pId,
+      remain: 10,
+      expiredDate: daysFromNow(30),
+    });
+    const created = await approvedOrder([{ pId, amount: 4 }]);
+    const [line] = created.items;
+
+    const error = await expectAppError(
+      ordersBranchService.receive(created.lotId, fixture.branchId, [
+        {
+          bodId: line.bodId,
+          receivedQty: 5,
+          expiredDate: daysFromNow(30).toISOString(),
+        },
+      ]),
+    );
+
+    expect(error.code).toBe("BAD_REQUEST");
+    expect(error.context).toMatchObject({
+      bodId: line.bodId,
+      approved: 4,
+      received: 5,
+    });
+    expect((await readOrder(created.lotId)).status).toBe("approved");
+    expect((await readLines(created.lotId))[0].remain).toBe(4);
+  });
+
+  test("refuses a receipt that leaves a line out", async () => {
+    const first = await fixture.createProduct();
+    const second = await fixture.createProduct();
+    for (const pId of [first, second]) {
+      await fixture.createHqLot({
+        pId,
+        remain: 10,
+        expiredDate: daysFromNow(30),
+      });
+    }
+    const created = await approvedOrder([
+      { pId: first, amount: 2 },
+      { pId: second, amount: 4 },
+    ]);
+
+    const error = await expectAppError(
+      ordersBranchService.receive(created.lotId, fixture.branchId, [
+        {
+          bodId: created.items[0].bodId,
+          receivedQty: created.items[0].amount,
+          expiredDate: daysFromNow(30).toISOString(),
+        },
+      ]),
+    );
+
+    expect(error.code).toBe("BAD_REQUEST");
+    expect(error.context).toMatchObject({ bodId: created.items[1].bodId });
+    expect((await readOrder(created.lotId)).status).toBe("approved");
+  });
+
+  test("refuses a line from a different order", async () => {
+    const pId = await fixture.createProduct();
+    await fixture.createHqLot({
+      pId,
+      remain: 10,
+      expiredDate: daysFromNow(30),
+    });
+    const created = await approvedOrder([{ pId, amount: 2 }]);
+    const other = await approvedOrder([{ pId, amount: 2 }]);
+    const expiredDate = daysFromNow(30).toISOString();
+
+    const error = await expectAppError(
+      ordersBranchService.receive(created.lotId, fixture.branchId, [
+        { bodId: created.items[0].bodId, receivedQty: 2, expiredDate },
+        { bodId: other.items[0].bodId, receivedQty: 2, expiredDate },
+      ]),
+    );
+
+    expect(error.code).toBe("BAD_REQUEST");
+    expect(error.context).toMatchObject({ bodId: other.items[0].bodId });
+    expect((await readOrder(created.lotId)).status).toBe("approved");
+    expect((await readOrder(other.lotId)).status).toBe("approved");
+  });
+});
+
 // Branch stock has no read endpoint yet (inventoryService.getBranchStock is
 // still a stub), so what a receipt added to the branch is observed the way the
 // spec ties it: against the product's minimums, through the alerts receipt
