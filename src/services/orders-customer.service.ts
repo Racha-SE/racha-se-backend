@@ -67,8 +67,9 @@ async function lockCustomerOrder(
 
 // Ordered by bodId so every caller (create, cancel) acquires these locks in
 // the same sequence — prevents a deadlock between two transactions that
-// touch overlapping lots.
-async function lockBranchStock(
+// touch overlapping lots. Shared with stockAdjustmentsService, which moves
+// the same lots.
+export async function lockBranchStock(
   tx: Transaction,
   branchId: number,
   pIds: number[],
@@ -88,7 +89,7 @@ async function lockBranchStock(
 
 // Drawable stock for a branch: unexpired (or never-expiring), on a
 // "completed" branch order, nearest-expiry first.
-async function loadDrawableLots(
+export async function loadDrawableLots(
   tx: Transaction,
   branchId: number,
   pIds: number[],

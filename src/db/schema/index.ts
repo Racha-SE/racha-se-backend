@@ -6,4 +6,5 @@ export * from "./supplier";
 export * from "./product";
 export * from "./order";
 export * from "./notification";
+export * from "./stock_adjustment";
 export * from "./relations";
