@@ -147,16 +147,18 @@ export const ordersBranchRoute = new Elysia({ prefix: "/orders/branch" })
   )
   .patch(
     "/:lotId/receive",
-    async ({ user, params }) => {
+    async ({ user, params, body }) => {
       await ordersBranchService.receive(
         params.lotId,
         user.branchId ?? undefined,
+        body?.items,
       );
       return successResponse({ message: "branch order received" });
     },
     {
       auth: ["branch"], // change later
       params: OrdersBranchModel.params,
+      body: OrdersBranchModel.receiveBody,
       response: {
         200: tSuccessResponse(OrdersBranchModel.receiveResponse),
         400: tErrorResponse("BAD_REQUEST"),
@@ -167,7 +169,7 @@ export const ordersBranchRoute = new Elysia({ prefix: "/orders/branch" })
       detail: {
         summary: "Record stock received at a branch",
         description:
-          "Branch confirms receipt of an approved order; no body needed - set status to completed, make noti in hq if amount of each product is below min_stock_hq and resolve noti in branch if amount of each product is greater than equal min_stock_branch",
+          "Branch confirms receipt of an approved order and sets status to completed. The body is optional: without it the order is received exactly as approved. With `items`, every line of the order must be listed once with the quantity that actually arrived (0 up to the approved amount) and the expiry date on the received stock; each line's remain/expiredDate are set to those values. A short line is recorded as a loss, not returned to HQ. Afterwards, opens an HQ min_stock alert for any product below min_stock_hq and resolves the branch's alert for any product now at or above min_stock_branch.",
         tags: ["Orders Branch"],
       },
     },
