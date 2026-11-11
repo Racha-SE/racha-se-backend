@@ -7,6 +7,7 @@ import {
   notification,
   order,
   product,
+  stockAdjustment,
   user,
 } from "@/db/schema";
 import { auth } from "@/utils";
@@ -214,6 +215,12 @@ export async function setupOrdersCustomerFixture(
           .delete(notification)
           .where(inArray(notification.pId, productIds));
       }
+
+      // stock_adjustment rows (written by the stock-adjustment tests that
+      // reuse this fixture) reference user/product/branch with no cascade.
+      await db
+        .delete(stockAdjustment)
+        .where(inArray(stockAdjustment.userId, userIds));
 
       if (lotIds.length > 0) {
         // customerOrderDetail references branchOrderDetail.bodId, so it has
