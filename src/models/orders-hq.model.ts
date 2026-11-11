@@ -11,9 +11,9 @@ const orderEntity = createSelectSchema(order);
 const headOrderEntity = createSelectSchema(headOrderDetail);
 
 const lineItem = t.Object({
-  pId: t.Number(),
-  supplierId: t.Number(),
-  amount: t.Number({ minimum: 1 }),
+  pId: t.Numeric({ minimum: 1 }),
+  supplierId: t.Numeric({ minimum: 1 }),
+  amount: t.Number({ minimum: 1, maximum: 10000 }),
   expiredDate: t
     .Transform(t.String({ format: "date-time" }))
     .Decode((date) => {
@@ -22,14 +22,14 @@ const lineItem = t.Object({
       return date;
     })
     .Encode((date) => date),
-  costPrice: t.Number({ minimum: 0 }),
+  costPrice: t.Number({ minimum: 0, maximum: 100000 }),
 });
 
 const lineItemView = t.Omit(headOrderEntity, ["lotId"]);
 
 export const OrdersHqModel = {
   createBody: t.Object({
-    items: t.Array(lineItem, { minItems: 1 }),
+    items: t.Array(lineItem, { minItems: 1, maxItems: 100 }),
   }),
   createBodyResponse: t.Composite([
     orderEntity,

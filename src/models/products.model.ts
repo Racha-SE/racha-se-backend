@@ -49,9 +49,9 @@ const insertSchema = createInsertSchema(product, {
       .Transform(schema)
       .Decode((value: string) => value.trim())
       .Encode((value: string) => value),
-  minStockHq: t.Integer({ minimum: 0 }),
-  minStockBranch: t.Integer({ minimum: 0 }),
-  price: t.Integer({ minimum: 0 }),
+  minStockHq: t.Integer({ minimum: 0, maximum: 10000 }),
+  minStockBranch: t.Integer({ minimum: 0, maximum: 10000 }),
+  price: t.Integer({ minimum: 0, maximum: 100000 }),
 });
 
 const baseProductBody = t.Omit(insertSchema, ["pId", "createdAt", "updatedAt"]);

@@ -13,8 +13,8 @@ const customerOrderDetailEntity = createSelectSchema(customerOrderDetail);
 const branchEntity = createSelectSchema(branch);
 
 const requestLineItem = t.Object({
-  pId: t.Number(),
-  quantity: t.Integer({ minimum: 1 }),
+  pId: t.Numeric({ minimum: 1 }),
+  quantity: t.Integer({ minimum: 1, maximum: 10000 }),
 });
 
 const orderStatusSchema = t.Union(
@@ -58,12 +58,12 @@ export const OrdersCustomerModel = {
   createBody: t.Object({
     paymentMethod: t.Union([t.Literal("cash"), t.Literal("qr")]),
     items: t
-      .Transform(t.Array(requestLineItem, { minItems: 1 }))
+      .Transform(t.Array(requestLineItem, { minItems: 1, maxItems: 100 }))
       .Decode((items) => {
         const checkedItems = new Set<number>();
         for (const item of items) {
           if (checkedItems.has(item.pId)) {
-            throw new AppError("VALIDATION");
+            throw new AppError("VALIDATION", { message: "duplicate products" });
           }
           checkedItems.add(item.pId);
         }
