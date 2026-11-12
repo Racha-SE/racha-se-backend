@@ -3,6 +3,7 @@ import { authPlugin } from "@/plugins/auth.plugin";
 import {
   InventoryModel,
   getBranchInventoryResponse,
+  getProductStockByBranchResponse,
 } from "@/models/inventory.model";
 import { inventoryService } from "@/services/inventory.service";
 import {
@@ -55,6 +56,48 @@ export const inventoryRoute = new Elysia({ prefix: "/inventory" })
           "Same shape as GET /inventory/hq, scoped to one branch. " +
           "`groupBy=false` (default) lists lots; `groupBy=true` collapses " +
           "them into one on-hand total per product for a cashier.",
+        tags: ["Inventory"],
+      },
+    },
+  )
+
+  .get(
+    "/branches",
+    async ({ user, query }) =>
+      successResponse(
+        await inventoryService.getAllBranchStock(toActor(user), query),
+      ),
+
+    {
+      auth: ["hq"],
+      query: InventoryModel.getBranchInventoryQuery,
+      response: getBranchInventoryResponse,
+      detail: {
+        summary: "View combined stock across all active branches",
+        description:
+          "Stock on hand across every active branch (HQ warehouse excluded). " +
+          "`groupBy=false` (default) lists each branch lot; `groupBy=true` " +
+          "sums every branch's lots into one total per product.",
+        tags: ["Inventory"],
+      },
+    },
+  )
+
+  .get(
+    "/products/:pId/branches",
+    async ({ user, params: { pId } }) =>
+      successResponse(
+        await inventoryService.getProductStockByBranch(toActor(user), pId),
+      ),
+    {
+      auth: ["hq"],
+      params: InventoryModel.productParams,
+      response: getProductStockByBranchResponse,
+      detail: {
+        summary: "View one product's stock per active branch",
+        description:
+          "Breaks GET /inventory/branches?groupBy=true's total for one product " +
+          "down by branch. Branches with no stock of it are left out.",
         tags: ["Inventory"],
       },
     },

@@ -31,6 +31,7 @@ import type {
   HqInventoryGroupByProduct,
   HqInventoryQuery,
   HqInventoryResult,
+  ProductStockByBranchResult,
 } from "@/models/inventory.model";
 import type { ProductCategoryRef } from "@/models/products.model";
 import { categoriesFor } from "@/services/products.service";
@@ -134,6 +135,160 @@ function categoryFilters(query: {
         )
       : undefined,
   ];
+}
+
+// Mirrors getHqStock (same search/category/sort/pagination, same ungrouped
+// vs grouped split), scoped to one branch instead of HQ-wide — the branch
+// catalog is meant to be the same UI as the HQ one. Ungrouped lists
+// branch_order_detail lots one row each, for a branch-manager-style
+// breakdown; grouped collapses them into a single on-hand total per
+// product, which is what a cashier needs to know whether they can sell it.
+async function queryBranchStock(
+  branchId: number | null,
+  query: BranchInventoryQuery = {},
+): Promise<BranchInventoryResult> {
+  const limit = query.limit ?? DEFAULT_LIMIT;
+  const offset = query.offset ?? 0;
+  const isGrouped = query.groupBy ?? false;
+
+  const conditions = [
+    branchId !== null
+      ? eq(branchOrderDetail.branchId, branchId)
+      : inArray(
+          branchOrderDetail.branchId,
+          db
+            .select({ id: branch.branchId })
+            .from(branch)
+            .where(eq(branch.isActive, true)),
+        ),
+    productSearchFilter(query.search),
+    ...categoryFilters(query),
+  ].filter((condition) => condition !== undefined);
+
+  const direction = query.sortOrder === "desc" ? desc : asc;
+  const lotSortColumns = {
+    quantity: branchOrderDetail.remain,
+    costPrice: branchOrderDetail.costPrice,
+    expiredDate: branchOrderDetail.expiredDate,
+  };
+  const sortBy = query.sortOption
+    ? lotSortColumns[query.sortOption]
+    : undefined;
+
+  if (!isGrouped) {
+    // Ungrouped is a list of lots, not of products: every on-hand
+    // branch_order_detail row stands on its own, so a product shows up once
+    // per lot it still has, and limit/offset page over lots.
+
+    const lotWhere = and(branchOnHandLots(), ...conditions);
+
+    const [rows, [{ totalCount }]] = await Promise.all([
+      db
+        .select({
+          pId: product.pId,
+          productName: product.name,
+          description: product.description,
+          barcode: product.barcode,
+          price: product.price,
+          quantity: branchOrderDetail.remain,
+          costPrice: branchOrderDetail.costPrice,
+          expiredDate: branchOrderDetail.expiredDate,
+        })
+        .from(branchOrderDetail)
+        .innerJoin(product, eq(product.pId, branchOrderDetail.pId))
+        .innerJoin(order, eq(order.lotId, branchOrderDetail.lotId))
+        .where(lotWhere)
+        .orderBy(
+          ...(sortBy ? [direction(sortBy)] : []),
+          asc(branchOrderDetail.pId),
+          asc(branchOrderDetail.expiredDate),
+          asc(branchOrderDetail.bodId),
+        )
+        .limit(limit)
+        .offset(offset),
+      db
+        .select({ totalCount: count() })
+        .from(branchOrderDetail)
+        .innerJoin(product, eq(product.pId, branchOrderDetail.pId))
+        .innerJoin(order, eq(order.lotId, branchOrderDetail.lotId))
+        .where(lotWhere),
+    ]);
+
+    if (rows.length === 0) return { inventory: [], totalCount };
+
+    const categoriesByProduct = await categoriesFor(rows.map((row) => row.pId));
+
+    return {
+      inventory: rows.map((row) => ({
+        pId: row.pId,
+        productName: row.productName,
+        description: row.description ?? "",
+        barcode: row.barcode,
+        ...categoryFields(categoriesByProduct.get(row.pId)),
+        quantity: row.quantity,
+        price: row.price,
+        costPrice: row.costPrice,
+        expiredDate: row.expiredDate?.toISOString() ?? null,
+      })),
+      totalCount,
+    };
+  }
+
+  // Grouped mode pages over *products*: one row per product, every lot's
+  // remain summed into a single total. Ordered by pId (not sortOption,
+  // same as getHqStock's grouped mode) since there's no per-lot price or
+  // expiry left to sort by once they're collapsed.
+
+  const productWhere = and(branchOnHandLots(), ...conditions);
+
+  const [rows, [{ totalCount }]] = await Promise.all([
+    db
+      .select({
+        pId: product.pId,
+        productName: product.name,
+        description: product.description,
+        barcode: product.barcode,
+        price: product.price,
+        quantity: sum(branchOrderDetail.remain).mapWith(Number),
+      })
+      .from(branchOrderDetail)
+      .innerJoin(product, eq(product.pId, branchOrderDetail.pId))
+      .innerJoin(order, eq(order.lotId, branchOrderDetail.lotId))
+      .where(productWhere)
+      .groupBy(
+        product.pId,
+        product.name,
+        product.description,
+        product.barcode,
+        product.price,
+      )
+      .orderBy(asc(product.pId))
+      .limit(limit)
+      .offset(offset),
+    db
+      .select({ totalCount: countDistinct(product.pId) })
+      .from(branchOrderDetail)
+      .innerJoin(product, eq(product.pId, branchOrderDetail.pId))
+      .innerJoin(order, eq(order.lotId, branchOrderDetail.lotId))
+      .where(productWhere),
+  ]);
+
+  if (rows.length === 0) return { inventory: [], totalCount };
+
+  const categoriesByProduct = await categoriesFor(rows.map((row) => row.pId));
+
+  return {
+    inventory: rows.map((row) => ({
+      pId: row.pId,
+      productName: row.productName,
+      description: row.description ?? "",
+      barcode: row.barcode,
+      ...categoryFields(categoriesByProduct.get(row.pId)),
+      quantity: row.quantity,
+      price: row.price,
+    })),
+    totalCount,
+  };
 }
 
 export const inventoryService = {
@@ -318,153 +473,49 @@ export const inventoryService = {
   },
 
   // --- Branch Scope---
-  // Mirrors getHqStock (same search/category/sort/pagination, same ungrouped
-  // vs grouped split), scoped to one branch instead of HQ-wide — the branch
-  // catalog is meant to be the same UI as the HQ one. Ungrouped lists
-  // branch_order_detail lots one row each, for a branch-manager-style
-  // breakdown; grouped collapses them into a single on-hand total per
-  // product, which is what a cashier needs to know whether they can sell it.
   async getBranchStock(
     branchId: number,
     query: BranchInventoryQuery = {},
   ): Promise<BranchInventoryResult> {
     await assertActiveBranch(branchId);
+    return queryBranchStock(branchId, query);
+  },
 
-    const limit = query.limit ?? DEFAULT_LIMIT;
-    const offset = query.offset ?? 0;
-    const isGrouped = query.groupBy ?? false;
+  async getAllBranchStock(
+    actor: ScopedActor,
+    query: BranchInventoryQuery = {},
+  ): Promise<BranchInventoryResult> {
+    assertBranchScope(actor, null);
+    return queryBranchStock(null, query);
+  },
 
-    const conditions = [
-      eq(branchOrderDetail.branchId, branchId),
-      productSearchFilter(query.search),
-      ...categoryFilters(query),
-    ].filter((condition) => condition !== undefined);
+  // Where getAllBranchStock's per-product total comes from: the same on-hand
+  // lots, summed per active branch instead of across them.
+  async getProductStockByBranch(
+    actor: ScopedActor,
+    pId: number,
+  ): Promise<ProductStockByBranchResult> {
+    assertBranchScope(actor, null);
 
-    const direction = query.sortOrder === "desc" ? desc : asc;
-    const lotSortColumns = {
-      quantity: branchOrderDetail.remain,
-      costPrice: branchOrderDetail.costPrice,
-      expiredDate: branchOrderDetail.expiredDate,
-    };
-    const sortBy = query.sortOption
-      ? lotSortColumns[query.sortOption]
-      : undefined;
+    const branches = await db
+      .select({
+        branchId: branch.branchId,
+        branchName: branch.name,
+        quantity: sum(branchOrderDetail.remain).mapWith(Number),
+      })
+      .from(branchOrderDetail)
+      .innerJoin(branch, eq(branch.branchId, branchOrderDetail.branchId))
+      .innerJoin(order, eq(order.lotId, branchOrderDetail.lotId))
+      .where(
+        and(
+          branchOnHandLots(),
+          eq(branch.isActive, true),
+          eq(branchOrderDetail.pId, pId),
+        ),
+      )
+      .groupBy(branch.branchId, branch.name)
+      .orderBy(asc(branch.name));
 
-    if (!isGrouped) {
-      // Ungrouped is a list of lots, not of products: every on-hand
-      // branch_order_detail row stands on its own, so a product shows up once
-      // per lot it still has, and limit/offset page over lots.
-
-      const lotWhere = and(branchOnHandLots(), ...conditions);
-
-      const [rows, [{ totalCount }]] = await Promise.all([
-        db
-          .select({
-            pId: product.pId,
-            productName: product.name,
-            description: product.description,
-            barcode: product.barcode,
-            price: product.price,
-            quantity: branchOrderDetail.remain,
-            costPrice: branchOrderDetail.costPrice,
-            expiredDate: branchOrderDetail.expiredDate,
-          })
-          .from(branchOrderDetail)
-          .innerJoin(product, eq(product.pId, branchOrderDetail.pId))
-          .innerJoin(order, eq(order.lotId, branchOrderDetail.lotId))
-          .where(lotWhere)
-          .orderBy(
-            ...(sortBy ? [direction(sortBy)] : []),
-            asc(branchOrderDetail.pId),
-            asc(branchOrderDetail.expiredDate),
-            asc(branchOrderDetail.bodId),
-          )
-          .limit(limit)
-          .offset(offset),
-        db
-          .select({ totalCount: count() })
-          .from(branchOrderDetail)
-          .innerJoin(product, eq(product.pId, branchOrderDetail.pId))
-          .innerJoin(order, eq(order.lotId, branchOrderDetail.lotId))
-          .where(lotWhere),
-      ]);
-
-      if (rows.length === 0) return { inventory: [], totalCount };
-
-      const categoriesByProduct = await categoriesFor(
-        rows.map((row) => row.pId),
-      );
-
-      return {
-        inventory: rows.map((row) => ({
-          pId: row.pId,
-          productName: row.productName,
-          description: row.description ?? "",
-          barcode: row.barcode,
-          ...categoryFields(categoriesByProduct.get(row.pId)),
-          quantity: row.quantity,
-          price: row.price,
-          costPrice: row.costPrice,
-          expiredDate: row.expiredDate?.toISOString() ?? null,
-        })),
-        totalCount,
-      };
-    }
-
-    // Grouped mode pages over *products*: one row per product, every lot's
-    // remain summed into a single total. Ordered by pId (not sortOption,
-    // same as getHqStock's grouped mode) since there's no per-lot price or
-    // expiry left to sort by once they're collapsed.
-
-    const productWhere = and(branchOnHandLots(), ...conditions);
-
-    const [rows, [{ totalCount }]] = await Promise.all([
-      db
-        .select({
-          pId: product.pId,
-          productName: product.name,
-          description: product.description,
-          barcode: product.barcode,
-          price: product.price,
-          quantity: sum(branchOrderDetail.remain).mapWith(Number),
-        })
-        .from(branchOrderDetail)
-        .innerJoin(product, eq(product.pId, branchOrderDetail.pId))
-        .innerJoin(order, eq(order.lotId, branchOrderDetail.lotId))
-        .where(productWhere)
-        .groupBy(
-          product.pId,
-          product.name,
-          product.description,
-          product.barcode,
-          product.price,
-        )
-        .orderBy(asc(product.pId))
-        .limit(limit)
-        .offset(offset),
-      db
-        .select({ totalCount: countDistinct(product.pId) })
-        .from(branchOrderDetail)
-        .innerJoin(product, eq(product.pId, branchOrderDetail.pId))
-        .innerJoin(order, eq(order.lotId, branchOrderDetail.lotId))
-        .where(productWhere),
-    ]);
-
-    if (rows.length === 0) return { inventory: [], totalCount };
-
-    const categoriesByProduct = await categoriesFor(rows.map((row) => row.pId));
-
-    return {
-      inventory: rows.map((row) => ({
-        pId: row.pId,
-        productName: row.productName,
-        description: row.description ?? "",
-        barcode: row.barcode,
-        ...categoryFields(categoriesByProduct.get(row.pId)),
-        quantity: row.quantity,
-        price: row.price,
-      })),
-      totalCount,
-    };
+    return { branches };
   },
 };
