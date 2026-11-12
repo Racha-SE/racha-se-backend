@@ -147,12 +147,30 @@ export const getBranchInventoryResponse = {
   404: tErrorResponse("NOT_FOUND"),
 };
 
+// One product's on-hand total per active branch (branches with none are left out).
+const ProductStockByBranchResponse = t.Object({
+  branches: t.Array(
+    t.Object({
+      branchId: t.Number(),
+      branchName: t.String(),
+      quantity: t.Integer(),
+    }),
+  ),
+});
+
+export const getProductStockByBranchResponse = {
+  200: tSuccessResponse(ProductStockByBranchResponse),
+  403: tErrorResponse("FORBIDDEN"),
+};
+
 export const InventoryModel = {
   getHqInventoryQuery: HqInventoryQuery,
   getHqInventoryResponse: HqInventoryResponse,
 
   branchParams: t.Object({ branchId: t.Numeric() }),
   getBranchInventoryQuery: BranchInventoryQuery,
+
+  productParams: t.Object({ pId: t.Numeric() }),
 };
 
 export type BranchInventoryQuery = Static<typeof BranchInventoryQuery>;
@@ -167,3 +185,6 @@ export type HqInventoryGroupByProduct = Static<
   typeof HqInventoryGroupByProduct
 >;
 export type HqInventoryResult = Static<typeof HqInventoryResponse>;
+export type ProductStockByBranchResult = Static<
+  typeof ProductStockByBranchResponse
+>;

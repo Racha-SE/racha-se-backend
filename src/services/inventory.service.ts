@@ -31,6 +31,7 @@ import type {
   HqInventoryGroupByProduct,
   HqInventoryQuery,
   HqInventoryResult,
+  ProductStockByBranchResult,
 } from "@/models/inventory.model";
 import type { ProductCategoryRef } from "@/models/products.model";
 import { categoriesFor } from "@/services/products.service";
@@ -483,8 +484,38 @@ export const inventoryService = {
   async getAllBranchStock(
     actor: ScopedActor,
     query: BranchInventoryQuery = {},
-  ) {
+  ): Promise<BranchInventoryResult> {
     assertBranchScope(actor, null);
     return queryBranchStock(null, query);
+  },
+
+  // Where getAllBranchStock's per-product total comes from: the same on-hand
+  // lots, summed per active branch instead of across them.
+  async getProductStockByBranch(
+    actor: ScopedActor,
+    pId: number,
+  ): Promise<ProductStockByBranchResult> {
+    assertBranchScope(actor, null);
+
+    const branches = await db
+      .select({
+        branchId: branch.branchId,
+        branchName: branch.name,
+        quantity: sum(branchOrderDetail.remain).mapWith(Number),
+      })
+      .from(branchOrderDetail)
+      .innerJoin(branch, eq(branch.branchId, branchOrderDetail.branchId))
+      .innerJoin(order, eq(order.lotId, branchOrderDetail.lotId))
+      .where(
+        and(
+          branchOnHandLots(),
+          eq(branch.isActive, true),
+          eq(branchOrderDetail.pId, pId),
+        ),
+      )
+      .groupBy(branch.branchId, branch.name)
+      .orderBy(asc(branch.name));
+
+    return { branches };
   },
 };
