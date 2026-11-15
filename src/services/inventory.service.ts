@@ -186,6 +186,7 @@ async function queryBranchStock(
       db
         .select({
           pId: product.pId,
+          branchId: branchOrderDetail.branchId,
           productName: product.name,
           description: product.description,
           barcode: product.barcode,
@@ -221,6 +222,7 @@ async function queryBranchStock(
     return {
       inventory: rows.map((row) => ({
         pId: row.pId,
+        branchId: row.branchId,
         productName: row.productName,
         description: row.description ?? "",
         barcode: row.barcode,

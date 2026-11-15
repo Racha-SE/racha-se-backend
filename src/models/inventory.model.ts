@@ -98,13 +98,15 @@ const HqInventoryResponse = t.Object({
 });
 
 // Branch's ungrouped mode: one item per on-hand branch_order_detail lot,
-// same shape as HqInventoryItem (branchId is implicit from the route param,
-// not repeated per row). `expiredDate` is nullable here only because the
+// same shape as HqInventoryItem plus `branchId` — the all-branches listing
+// mixes lots from every branch, so each row says which one holds it.
+// `expiredDate` is nullable here only because the
 // column briefly is before a branch order is approved — any row this reaches
 // has remain > 0, which only happens after approval sets it, so in practice
 // it's never actually null.
 const BranchInventoryItem = t.Object({
   pId: t.Number(),
+  branchId: t.Number(),
   productName: t.String(),
   productCategory: productCategoryNames,
   categories,
