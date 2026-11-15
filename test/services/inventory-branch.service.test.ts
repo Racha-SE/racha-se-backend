@@ -1,7 +1,12 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { eq, inArray } from "drizzle-orm";
 import { db } from "@/db/client";
-import { branch, productCategory, productCategoryMap } from "@/db/schema";
+import {
+  branch,
+  product,
+  productCategory,
+  productCategoryMap,
+} from "@/db/schema";
 import type {
   BranchInventoryGroupByProduct,
   BranchInventoryItem,
@@ -35,6 +40,10 @@ let category: ProductCategoryRef;
 let twoLotPId: number;
 /** one lot, zero remain — shouldn't show up as on-hand */
 let depletedPId: number;
+/** one lot, already expired — still on the shelf, so still listed */
+let expiredPId: number;
+/** has stock, but the product was deactivated — never listed */
+let inactivePId: number;
 
 beforeAll(async () => {
   fixture = await setupOrdersCustomerFixture("svcbranchinventory");
@@ -74,6 +83,24 @@ beforeAll(async () => {
     remain: 0,
     expiredDate: daysFromNow(30),
   });
+
+  expiredPId = await fixture.createProduct();
+  await fixture.createBranchStock({
+    pId: expiredPId,
+    remain: 3,
+    expiredDate: daysFromNow(-1),
+  });
+
+  inactivePId = await fixture.createProduct();
+  await fixture.createBranchStock({
+    pId: inactivePId,
+    remain: 7,
+    expiredDate: daysFromNow(30),
+  });
+  await db
+    .update(product)
+    .set({ isActive: false })
+    .where(eq(product.pId, inactivePId));
 
   fixture2 = await setupOrdersCustomerFixture("svcallbranchinventory");
   await fixture2.createBranchStock({
@@ -121,6 +148,21 @@ describe("inventoryService.getBranchStock", () => {
 
     expect(pIds).not.toContain(depletedPId);
   });
+
+  test.each([false, true])(
+    "groupBy %p: expired lots are listed, inactive products are not",
+    async (groupBy) => {
+      const result = await inventoryService.getBranchStock(fixture.branchId, {
+        search: "svcbranchinventory",
+        groupBy,
+        limit: 100,
+      });
+      const pIds = result.inventory.map((item) => item.pId);
+
+      expect(pIds).toContain(expiredPId);
+      expect(pIds).not.toContain(inactivePId);
+    },
+  );
 
   test("grouped: every lot's remain summed into one row per product", async () => {
     const result = await inventoryService.getBranchStock(fixture.branchId, {
@@ -229,6 +271,23 @@ describe("inventoryService.getProductStockByBranch", () => {
         { branchId: fixture2.branchId, quantity: 5 },
       ].sort((a, b) => a.branchId - b.branchId),
     );
+  });
+
+  test("an inactive product has no rows, an expired lot still counts", async () => {
+    const hq: ScopedActor = {
+      id: fixture.hqUser.id,
+      userType: "hq",
+      branchId: null,
+    };
+
+    expect(
+      (await inventoryService.getProductStockByBranch(hq, inactivePId))
+        .branches,
+    ).toEqual([]);
+    expect(
+      (await inventoryService.getProductStockByBranch(hq, expiredPId))
+        .branches[0].quantity,
+    ).toBe(3);
   });
 
   test("rejects a branch actor with FORBIDDEN", async () => {

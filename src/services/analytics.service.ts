@@ -8,6 +8,9 @@ import {
   gte,
   isNotNull,
   lt,
+  or,
+  isNull,
+  gt,
   max,
   notExists,
   sql,
@@ -246,9 +249,9 @@ export const analyticsService = {
 
   /**
    * Dead stock at the caller's branch: active products it has on hand that
-   * didn't sell there at all in the timeframe. "On hand" is exactly what the
-   * branch inventory listing counts (`branchOnHandLots`) — completed lots
-   * with stock left that haven't expired — so the two screens agree.
+   * didn't sell there at all in the timeframe. "On hand" is what the branch
+   * inventory listing counts (`branchOnHandLots`) — completed lots with
+   * stock left — minus the expired lots that listing still shows.
    * Expired stock is left out on purpose: expiry alerts already cover it,
    * and it can't be sold to clear it anyway.
    *
@@ -276,7 +279,16 @@ export const analyticsService = {
       })
       .from(branchOrderDetail)
       .innerJoin(order, eq(order.lotId, branchOrderDetail.lotId))
-      .where(and(eq(branchOrderDetail.branchId, branchId), branchOnHandLots()))
+      .where(
+        and(
+          eq(branchOrderDetail.branchId, branchId),
+          branchOnHandLots(),
+          or(
+            isNull(branchOrderDetail.expiredDate),
+            gt(branchOrderDetail.expiredDate, new Date()),
+          ),
+        ),
+      )
       .groupBy(branchOrderDetail.pId)
       .as("on_hand");
 

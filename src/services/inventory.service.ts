@@ -12,7 +12,6 @@ import {
   inArray,
   or,
   sum,
-  isNull,
   type SQL,
 } from "drizzle-orm";
 import { db } from "@/db/client";
@@ -53,16 +52,10 @@ function onHandLots(): SQL | undefined {
   );
 }
 
-// Also what analytics' dead-stock list counts as "on hand", so the two agree.
+// Expired lots stay in, same as HQ's onHandLots — they're still on the shelf.
+// Analytics' dead-stock list builds on this and drops the expired ones itself.
 export function branchOnHandLots(): SQL | undefined {
-  return and(
-    eq(order.status, "completed"),
-    gt(branchOrderDetail.remain, 0),
-    or(
-      isNull(branchOrderDetail.expiredDate),
-      gt(branchOrderDetail.expiredDate, new Date()),
-    ),
-  );
+  return and(eq(order.status, "completed"), gt(branchOrderDetail.remain, 0));
 }
 
 /** Both category fields of an inventory item, from one product's categories. */
@@ -161,6 +154,7 @@ async function queryBranchStock(
             .from(branch)
             .where(eq(branch.isActive, true)),
         ),
+    eq(product.isActive, true),
     productSearchFilter(query.search),
     ...categoryFilters(query),
   ].filter((condition) => condition !== undefined);
@@ -508,10 +502,12 @@ export const inventoryService = {
       .from(branchOrderDetail)
       .innerJoin(branch, eq(branch.branchId, branchOrderDetail.branchId))
       .innerJoin(order, eq(order.lotId, branchOrderDetail.lotId))
+      .innerJoin(product, eq(product.pId, branchOrderDetail.pId))
       .where(
         and(
           branchOnHandLots(),
           eq(branch.isActive, true),
+          eq(product.isActive, true),
           eq(branchOrderDetail.pId, pId),
         ),
       )
