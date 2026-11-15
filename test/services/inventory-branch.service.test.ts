@@ -169,6 +169,21 @@ describe("inventoryService.getAllBranchStock", () => {
     expect(await groupedTotal()).toBe(15);
   });
 
+  test("ungrouped: every lot carries the branch it belongs to", async () => {
+    const result = await inventoryService.getAllBranchStock(hqActor(), {
+      categoryId: category.categoryId,
+      limit: 100,
+    });
+    const lots = (result.inventory as BranchInventoryItem[])
+      .filter((item) => item.pId === twoLotPId)
+      .map(({ branchId, quantity }) => ({ branchId, quantity }));
+
+    expect(lots).toHaveLength(3);
+    expect(lots).toContainEqual({ branchId: fixture.branchId, quantity: 4 });
+    expect(lots).toContainEqual({ branchId: fixture.branchId, quantity: 6 });
+    expect(lots).toContainEqual({ branchId: fixture2.branchId, quantity: 5 });
+  });
+
   test("a deactivated branch's stock is left out", async () => {
     await db
       .update(branch)
