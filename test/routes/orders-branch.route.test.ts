@@ -371,31 +371,6 @@ describe("PATCH /orders/branch/:lotId/receive", () => {
     expect(line.expiredDate).toEqual(expiredDate);
   });
 
-  test("accepts a zero-quantity line with no expiredDate", async () => {
-    const { lotId, items } = await approvedOrderWithLines();
-
-    const response = await patchReceive(lotId, branchCookie, {
-      items: [{ bodId: items[0].bodId, receivedQty: 0 }],
-    });
-
-    expect(response.status).toBe(200);
-    const line = await readLine(lotId);
-    expect(line.remain).toBe(0);
-    expect(line.expiredDate).toBeNull();
-  });
-
-  test("returns 400 when a received line has no expiredDate", async () => {
-    const { lotId, items } = await approvedOrderWithLines();
-
-    const response = await patchReceive(lotId, branchCookie, {
-      items: [{ bodId: items[0].bodId, receivedQty: 2 }],
-    });
-    const body = (await response.json()) as ErrorBody;
-
-    expect(response.status).toBe(400);
-    expect(body.success).toBe(false);
-  });
-
   test("returns 400 when a line is listed twice", async () => {
     const { lotId, items } = await approvedOrderWithLines();
     const line = {

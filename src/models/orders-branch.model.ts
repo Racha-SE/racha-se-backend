@@ -15,24 +15,18 @@ const requestLineItem = t.Object({
 // What the branch counted off the truck for one approved line. receivedQty
 // can be short of what HQ sent (lost or damaged in transit) but never over
 // it - the service checks that against the line, since only it knows the
-// approved amount. Zero is allowed: the whole line didn't arrive, in which
-// case there's nothing to date and expiredDate can be left out - the service
-// requires it only when something actually arrived.
+// approved amount. Zero is allowed: the whole line didn't arrive.
 const receiveLineItem = t.Object({
   bodId: t.Integer({ minimum: 1 }),
   receivedQty: t.Integer({ minimum: 0, maximum: 10000 }),
-  expiredDate: t.Optional(
-    t
-      .Transform(t.String({ format: "date-time" }))
-      .Decode((date) => {
-        if (new Date(date) < new Date())
-          throw new AppError("VALIDATION", {
-            message: "incorrect expired date",
-          });
-        return date;
-      })
-      .Encode((date) => date),
-  ),
+  expiredDate: t
+    .Transform(t.String({ format: "date-time" }))
+    .Decode((date) => {
+      if (new Date(date) < new Date())
+        throw new AppError("VALIDATION", { message: "incorrect expired date" });
+      return date;
+    })
+    .Encode((date) => date),
 });
 
 const lineItemView = t.Composite([
