@@ -125,13 +125,6 @@ async function recordReceivedLines(
         received: item.receivedQty,
       });
     }
-
-    if (item.receivedQty > 0 && !item.expiredDate) {
-      throw new AppError("VALIDATION", {
-        message: `Line ${line.bodId} needs an expiredDate for the quantity that arrived`,
-        bodId: line.bodId,
-      });
-    }
   }
 
   await tx.execute(sql`
@@ -142,11 +135,7 @@ async function recordReceivedLines(
     from (values ${sql.join(
       items.map(
         ({ bodId, receivedQty, expiredDate }) =>
-          sql`(${bodId}::int, ${receivedQty}::int, ${
-            expiredDate
-              ? utcTimestamp(new Date(expiredDate))
-              : sql`NULL::timestamp`
-          })`,
+          sql`(${bodId}::int, ${receivedQty}::int, ${utcTimestamp(new Date(expiredDate))})`,
       ),
       sql`, `,
     )})
