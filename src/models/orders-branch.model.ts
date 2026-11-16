@@ -15,7 +15,10 @@ const requestLineItem = t.Object({
 // What the branch counted off the truck for one approved line. receivedQty
 // can be short of what HQ sent (lost or damaged in transit) but never over
 // it - the service checks that against the line, since only it knows the
-// approved amount. Zero is allowed: the whole line didn't arrive.
+// approved amount. Zero is allowed: the whole line didn't arrive - but
+// expiredDate is still required even then, because trg_check_branch_order_
+// detail_expiry (0001_triggers.sql) blocks completing the order while any of
+// its branch_order_detail rows has a null expired_date.
 const receiveLineItem = t.Object({
   bodId: t.Integer({ minimum: 1 }),
   receivedQty: t.Integer({ minimum: 0, maximum: 10000 }),
