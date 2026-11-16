@@ -12,14 +12,11 @@ import { and, asc, count, desc, eq, exists, inArray, sql } from "drizzle-orm";
 import { branchOrderDetail, customerOrderDetail, order } from "@/db/schema";
 import { notificationService } from "@/services/notification.service";
 import { AppError } from "@/utils/error";
+import { utcTimestamp } from "@/utils/sql";
 
 const DEFAULT_LIMIT = 10;
 
 type Transaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
-
-function utcTimestamp(value: Date) {
-  return sql`${value.toISOString()}::timestamp`;
-}
 
 type OrderStatus = (typeof order.status.enumValues)[number];
 
@@ -67,8 +64,9 @@ async function lockCustomerOrder(
 
 // Ordered by bodId so every caller (create, cancel) acquires these locks in
 // the same sequence — prevents a deadlock between two transactions that
-// touch overlapping lots.
-async function lockBranchStock(
+// touch overlapping lots. Shared with stockAdjustmentsService, which moves
+// the same lots.
+export async function lockBranchStock(
   tx: Transaction,
   branchId: number,
   pIds: number[],
@@ -88,7 +86,7 @@ async function lockBranchStock(
 
 // Drawable stock for a branch: unexpired (or never-expiring), on a
 // "completed" branch order, nearest-expiry first.
-async function loadDrawableLots(
+export async function loadDrawableLots(
   tx: Transaction,
   branchId: number,
   pIds: number[],
