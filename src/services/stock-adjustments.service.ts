@@ -17,18 +17,19 @@ import {
 } from "@/services/orders-customer.service";
 import { AppError } from "@/utils/error";
 import { assertBranchScope, type ScopedActor } from "@/utils/hierarchy";
+import { utcTimestamp } from "@/utils/sql";
 
 type Transaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
-
-function utcTimestamp(value: Date) {
-  return sql`${value.toISOString()}::timestamp`;
-}
 
 /**
  * The newest unexpired lot this branch has received of a product, even one
  * that's sold out - where a positive correction ("we have more than the
  * system says") goes back on. A branch can't hold more of a product than it
  * was ever sent, so a product it never received has nowhere to add to.
+ *
+ * The found units inherit this lot's expiry, even though they weren't
+ * necessarily counted off it - a simplification, since an adjustment has no
+ * lot of its own to record a separate expiry against.
  */
 async function findLotToTopUp(
   tx: Transaction,

@@ -31,14 +31,11 @@ import {
 } from "@/db/schema";
 import { AppError } from "@/utils/error";
 import { UserType } from "@/utils/hierarchy";
+import { utcTimestamp } from "@/utils/sql";
 
 const DEFAULT_LIMIT = 10;
 
 type Transaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
-
-function utcTimestamp(value: Date) {
-  return sql`${value.toISOString()}::timestamp`;
-}
 
 type OrderStatus = (typeof order.status.enumValues)[number];
 

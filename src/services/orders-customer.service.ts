@@ -12,14 +12,11 @@ import { and, asc, count, desc, eq, exists, inArray, sql } from "drizzle-orm";
 import { branchOrderDetail, customerOrderDetail, order } from "@/db/schema";
 import { notificationService } from "@/services/notification.service";
 import { AppError } from "@/utils/error";
+import { utcTimestamp } from "@/utils/sql";
 
 const DEFAULT_LIMIT = 10;
 
 type Transaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
-
-function utcTimestamp(value: Date) {
-  return sql`${value.toISOString()}::timestamp`;
-}
 
 type OrderStatus = (typeof order.status.enumValues)[number];
 
