@@ -98,13 +98,15 @@ const HqInventoryResponse = t.Object({
 });
 
 // Branch's ungrouped mode: one item per on-hand branch_order_detail lot,
-// same shape as HqInventoryItem (branchId is implicit from the route param,
-// not repeated per row). `expiredDate` is nullable here only because the
+// same shape as HqInventoryItem plus `branchId` — the all-branches listing
+// mixes lots from every branch, so each row says which one holds it.
+// `expiredDate` is nullable here only because the
 // column briefly is before a branch order is approved — any row this reaches
 // has remain > 0, which only happens after approval sets it, so in practice
 // it's never actually null.
 const BranchInventoryItem = t.Object({
   pId: t.Number(),
+  branchId: t.Number(),
   productName: t.String(),
   productCategory: productCategoryNames,
   categories,
@@ -147,12 +149,30 @@ export const getBranchInventoryResponse = {
   404: tErrorResponse("NOT_FOUND"),
 };
 
+// One product's on-hand total per active branch (branches with none are left out).
+const ProductStockByBranchResponse = t.Object({
+  branches: t.Array(
+    t.Object({
+      branchId: t.Number(),
+      branchName: t.String(),
+      quantity: t.Integer(),
+    }),
+  ),
+});
+
+export const getProductStockByBranchResponse = {
+  200: tSuccessResponse(ProductStockByBranchResponse),
+  403: tErrorResponse("FORBIDDEN"),
+};
+
 export const InventoryModel = {
   getHqInventoryQuery: HqInventoryQuery,
   getHqInventoryResponse: HqInventoryResponse,
 
   branchParams: t.Object({ branchId: t.Numeric() }),
   getBranchInventoryQuery: BranchInventoryQuery,
+
+  productParams: t.Object({ pId: t.Numeric() }),
 };
 
 export type BranchInventoryQuery = Static<typeof BranchInventoryQuery>;
@@ -167,3 +187,6 @@ export type HqInventoryGroupByProduct = Static<
   typeof HqInventoryGroupByProduct
 >;
 export type HqInventoryResult = Static<typeof HqInventoryResponse>;
+export type ProductStockByBranchResult = Static<
+  typeof ProductStockByBranchResponse
+>;

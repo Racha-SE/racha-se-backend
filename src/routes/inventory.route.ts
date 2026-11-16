@@ -3,6 +3,7 @@ import { authPlugin } from "@/plugins/auth.plugin";
 import {
   InventoryModel,
   getBranchInventoryResponse,
+  getProductStockByBranchResponse,
 } from "@/models/inventory.model";
 import { StockAdjustmentsModel } from "@/models/stock-adjustments.model";
 import { inventoryService } from "@/services/inventory.service";
@@ -91,6 +92,48 @@ export const inventoryRoute = new Elysia({ prefix: "/inventory" })
           "adjustment is recorded with who made it and why, and the " +
           "branch's min_stock alert is re-checked. Returns the record plus " +
           "`onHand`, the product's new on-hand total at the branch.",
+        tags: ["Inventory"],
+      },
+    },
+  )
+
+  .get(
+    "/branches",
+    async ({ user, query }) =>
+      successResponse(
+        await inventoryService.getAllBranchStock(toActor(user), query),
+      ),
+
+    {
+      auth: ["hq"],
+      query: InventoryModel.getBranchInventoryQuery,
+      response: getBranchInventoryResponse,
+      detail: {
+        summary: "View combined stock across all active branches",
+        description:
+          "Stock on hand across every active branch (HQ warehouse excluded). " +
+          "`groupBy=false` (default) lists each branch lot; `groupBy=true` " +
+          "sums every branch's lots into one total per product.",
+        tags: ["Inventory"],
+      },
+    },
+  )
+
+  .get(
+    "/products/:pId/branches",
+    async ({ user, params: { pId } }) =>
+      successResponse(
+        await inventoryService.getProductStockByBranch(toActor(user), pId),
+      ),
+    {
+      auth: ["hq"],
+      params: InventoryModel.productParams,
+      response: getProductStockByBranchResponse,
+      detail: {
+        summary: "View one product's stock per active branch",
+        description:
+          "Breaks GET /inventory/branches?groupBy=true's total for one product " +
+          "down by branch. Branches with no stock of it are left out.",
         tags: ["Inventory"],
       },
     },
